@@ -4,7 +4,6 @@
 /// If you change the name of this file, make sure to update its references in runtime/src/lib.rs
 /// If you remove this file, you can remove those references
 
-
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
@@ -326,5 +325,37 @@ impl<T: Trait> Module<T> {
     // End ERC721 : Enumerable : Internal Functions //
 }
 
+// TESTING
 
+#[cfg(test)]
+use super::*;
 
+// Import necessary types
+use primitives::{H256, Blake2Hasher}; //called substrate_primitives as primitives
+
+use runtime_primitives::{
+    traits::{IdentityLookup}, // safely looks up the identity
+    testing::{Digest, DigestItem, Header}
+};
+
+// 2. Set up mock runtime
+pub struct Runtime;
+
+impl balances::Trait for Runtime {
+
+}
+
+// #[derive(Clone, PartialEq, Eq, Debug)]
+impl system::Trait for Runtime {
+    type Origin = Origin;
+    type Index = u64;
+    type BlockNumber = u64;
+    type Hash = H256;
+    type Hashing = BlakeTwo256;
+    type Digest = Digest;
+    type AccountId = u64;
+    type Lookup = IdentityLookup<Self::AccountId>;
+    type Header = Header;
+    type Event = ();
+    type Log = DigestItem;
+}
