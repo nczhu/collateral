@@ -334,21 +334,17 @@ use super::*;
 use primitives::{H256, Blake2Hasher}; //called substrate_primitives as primitives
 
 use runtime_primitives::{
-    traits::{IdentityLookup}, // safely looks up the identity
+    traits::{IdentityLookup}, // Test wrapper for this specific type/ looks up the identity; returns Result
     testing::{Digest, DigestItem, Header}
 };
 
 // 2. Set up mock runtime
 pub struct Runtime;
 
-impl balances::Trait for Runtime {
-
-}
-
 // #[derive(Clone, PartialEq, Eq, Debug)]
 impl system::Trait for Runtime {
-    type Origin = Origin;
-    type Index = u64;
+    type Origin = Origin;  // these types are declared in the module traits, so they must be ste
+    type Index = u64;       //hack it to just be a u64 int (later: double check the actual type?)
     type BlockNumber = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
@@ -359,3 +355,13 @@ impl system::Trait for Runtime {
     type Event = ();
     type Log = DigestItem;
 }
+
+impl balances::Trait for Runtime {
+    type Balance = u64; //hack it to be a u64 figure
+    type OnFreeBalanceZero = (); //dont give it a variable? unless you have an implemntation e.g. freebalance in staking module
+    type OnNewAccount = ();
+    type TransactionPayment = ();
+    type TransferPayment = ();
+    type DustRemoval = ();
+}
+
