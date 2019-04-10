@@ -1,7 +1,6 @@
 /* Used / Learned: 
 	- Currency trait
 	- Moment trait
-	
 */
 
 use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
@@ -15,6 +14,10 @@ pub trait Trait: system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
+enum RequestStatus {
+	Draft,
+	Collateralized,
+}
 
 // Asset owners can create a DebtRequest to ask for a traunche of Balance
 pub struct DebtRequest<Hash, AccountId, Currency, Moment> {   //Needs the blake2 Hash trait
@@ -24,13 +27,36 @@ pub struct DebtRequest<Hash, AccountId, Currency, Moment> {   //Needs the blake2
 	amount: Currency,				// Amount of loan
 	expiry: Moment,					// Duration of debtRequest
 	collateralized: bool,		// Defaults to false, true upon collaterlization
+	status: RequestStatus,	// status of this request
 }
+
+enum OrderStatus {
+	Expired,		// loan is never filled, expired
+	Open, 			// looking for issuance
+	Active, 		// loan issued
+	Repaid, 		// closed, repaid
+	Default,		// unpaid, collat seized
+}
+
+// Created upon successful collateralization
+pub struct DebtOrder<Hash, AccountId, Moment> {
+	id: Hash, 
+	requestId: Hash,				// corresponding DebtRequestId
+	status: OrderStatus,		// status of this order
+	creditor: AccountId,
+	
+	// Input by debtor
+	expiry: Moment,					// Due date for all payment
+	// TODO collateral of tokens...  // a fixed length array of tokens collateralized in system escrow
+}
+
 
 decl_storage! {
 	trait Store for Module<T: Trait> as Collateral {
 		
-		DebtRequests get(get_debt_order): map T::Hash => DebtRequest<T::Hash>;
+		DebtRequests get(get_debt_order): map T::Hash => DebtRequest<T::Hash>; //DebtRequest ID to the RequestItself
 
+		// Escrow get(escrow): //hash of tokenID under management
 
 	}
 }
@@ -43,12 +69,12 @@ decl_module! {
 		// DEBTOR:
 		// pub fn create_debt_request
 
-		// pub fn collateralize_debt_request
+		// pub fn collateralize_debt_request (stake n tokens?)
 
+		// pub fn pay_back_debt() // has to be a one time payment...
 
-		// LOANER: 
+		// LOANER:
 		// pub fn fill_debt_order
-
 		
 
 		// SYSTEM:     		// Removes the need for a trusted contract, etc. system maintains
