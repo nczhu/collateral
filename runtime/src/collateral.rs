@@ -6,12 +6,13 @@
 use crate::erc721;		// our ERC 721 implementation
 
 use support::{decl_module, decl_storage, decl_event, 
-	StorageValue, 
+	StorageValue, StorageMap,
 	dispatch::Result, 
 	ensure //ensure is a macro from support/src/lib
 	}; 
 use system::ensure_signed;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
+use runtime_primitives::traits::{Hash}; // Zero, As
 
 // import currency trait, to get access to "ensure_can_withdraw", everything for balance. 
 // use support::traits::{Currency}; // Other avail traits lockablecurrency, onfreebalancezero, etc.
@@ -39,9 +40,9 @@ pub struct DebtRequest<Hash, AccountId, Balance, Moment> {   //Needs the blake2 
 }
 
 // Status of the collateralized debt
-#[derive(Encode)] //Encode, Deco req for enums
+#[derive(Encode, Decode, Clone, Copy, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
 #[cfg_attr(feature = "std", derive(Debug))]
-enum OrderStatus {
+pub enum OrderStatus {
 	Expired,		// loan is never filled, expired
 	Open, 			// looking for issuance
 	Active, 		// loan issued
@@ -50,7 +51,7 @@ enum OrderStatus {
 }
 
 // Created upon successful collateralization
-#[derive(Encode, Decode, Default)] //Default is only for structs
+#[derive(Encode, Decode, Default, Clone, PartialEq)] //Default is only for structs
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct DebtOrder<Hash, AccountId, Moment> {
 	id: Hash, 
@@ -92,11 +93,13 @@ decl_module! {
 			// TODO check expiry
 
 			let now = <timestamp::Module<T>>::get();
-			let id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash);
+
+			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
+			let id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash); // use runtime_primitives::hash, its a constnat!
 			let collateralized = false;
 
 			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
-			ensure!(!<DebtRequests<T>>::exists(id), "Error: Debt already exists");
+			// ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
 			let new_debt_request = DebtRequest {id, requestor, beneficiary, amount, expiry, collateralized};
 
 			// Add new debt request to DebtRequests map
@@ -105,7 +108,7 @@ decl_module! {
 			<DebtRequests<T>>::insert(i, new_debt_request);
 			
 			// emit the event TODO: figure out how to emit debt details later
-			Self::deposit_event(RawEvent::DebtRequestCreated(9, &requestor));
+			Self::deposit_event(RawEvent::DebtRequestCreated(9, requestor));
 		}
 
 
