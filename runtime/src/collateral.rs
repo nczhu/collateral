@@ -39,15 +39,21 @@ pub struct DebtRequest<Hash, AccountId, Balance, Moment> {   //Needs the blake2 
 	collateralized: bool,		// Defaults to false, true upon collaterlization
 }
 
-// Status of the collateralized debt
+/// Status of the collateralized debt
 #[derive(Encode, Decode, Clone, Copy, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum OrderStatus {
-	Expired,		// loan is never filled, expired
+	/// loan is never filled, expired
+	Expired,		/// loan is never filled, expired
 	Open, 			// looking for issuance
 	Active, 		// loan issued
 	Repaid, 		// closed, repaid
-	Default,		// unpaid, collat seized
+	Defaulted,		// unpaid, collat seized
+}
+
+impl Default for OrderStatus {
+	// returns 
+	fn default() -> OrderStatus { OrderStatus::Defaulted }
 }
 
 // Created upon successful collateralization
@@ -59,6 +65,8 @@ pub struct DebtOrder<Hash, AccountId, Moment> {
 	status: OrderStatus,		// status of this order
 	creditor: AccountId,
 	// Input by debtor
+	// TODO: expiry should be Option<Moment>. so it defaults to None
+	// unless moment already defaults to None?
 	expiry: Moment,					// Due date for all payment
 	// TODO collateral of tokens...  // a fixed length array of tokens collateralized in system escrow
 }
