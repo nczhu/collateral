@@ -102,9 +102,7 @@ decl_module! {
 		) { //TODO, change expiry
 			let requestor = ensure_signed(origin)?;		//macro, returns sender address
 
-			// TODO initial check
-			// TODO check expiry
-
+			// TODO: just check expiry is not before today
 			let now = <timestamp::Module<T>>::get();
 
 			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
@@ -117,10 +115,10 @@ decl_module! {
 			ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
 			let new_debt_request = DebtRequest {
 				id,
-				requestor, 
+				requestor,
 				beneficiary: beneficiary.clone(), 	// can i do this here?!
-				amount, 
-				expiry, 
+				amount,
+				expiry,
 				collateralized
 			};
 
@@ -259,8 +257,15 @@ mod tests {
 				1,			// beneficiary, some u64, AccountId
 				12345			// expiry: Moment
 			));
-
 		});
 	}
+
+	fn should_not_override_debt_request() {
+
+	}
+
+	fn should_not_create_expired_debt_requests() {
+
+	}	
 
 }
