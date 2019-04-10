@@ -107,7 +107,14 @@ decl_module! {
 
 			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
 			// ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
-			let new_debt_request = DebtRequest {id, requestor, beneficiary: beneficiary.clone(), amount, expiry, collateralized};
+			let new_debt_request = DebtRequest {
+				id, 
+				requestor, 
+				beneficiary: beneficiary.clone(), 	// can i do this here?!
+				amount, 
+				expiry, 
+				collateralized
+			};
 
 			// Add new debt request to DebtRequests map
 			let i = Self::get_total_debt_requests();
