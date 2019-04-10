@@ -7,7 +7,7 @@ use crate::erc721;		// our ERC 721 implementation
 use support::{decl_module, decl_storage, decl_event, 
 	StorageValue, StorageMap,
 	//dispatch::Result, 
-	//ensure //ensure is a macro from support/src/lib
+	ensure //ensure is a macro from support/src/lib
 	}; 
 use system::ensure_signed;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
@@ -75,7 +75,9 @@ decl_storage! {
 		
 		// TODO later abstrate T::Hash into generic vars, so its not so long?
 		// doesn't get deleted
-		DebtRequests get(get_debt_order): map DebtRequestIndex => DebtRequest<T::Hash, T::AccountId, T::Balance, T::Moment>; //DebtRequest ID to the RequestItself
+		DebtRequests get(get_debt_order): map T::Hash => DebtRequest<T::Hash, T::AccountId, T::Balance, T::Moment>; //DebtRequest ID to the RequestItself
+		// [0, 0x...] [1, 0x...]
+		DebtRequestIndexToId get(get_debt_request_id): map DebtRequestIndex => T::Hash;
 		DebtRequestCount get(get_total_debt_requests): DebtRequestIndex;  //Alias for u64
 		// Escrow get(escrow): //hash of tokenID under management
 	}
@@ -112,9 +114,9 @@ decl_module! {
 			let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
 
 			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
-			// ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
+			ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
 			let new_debt_request = DebtRequest {
-				id, 
+				id,
 				requestor, 
 				beneficiary: beneficiary.clone(), 	// can i do this here?!
 				amount, 
@@ -125,7 +127,8 @@ decl_module! {
 			// Add new debt request to DebtRequests map
 			let i = Self::get_total_debt_requests();
 			<DebtRequestCount<T>>::put(i+1); //increment total count by 1
-			<DebtRequests<T>>::insert(i, new_debt_request);
+			<DebtRequestIndexToId<T>>::insert(i, &id);
+			<DebtRequests<T>>::insert(id, new_debt_request);
 			
 			// emit the event TODO: figure out how to emit debt details later
 			Self::deposit_event(RawEvent::DebtRequestCreated(9, beneficiary));
