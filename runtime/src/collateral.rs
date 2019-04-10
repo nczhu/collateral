@@ -1,18 +1,37 @@
+/* Used / Learned: 
+	- Currency trait
+	- Moment trait
+	
+*/
 
 use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
 use system::ensure_signed;
+
+// import currency trait, to get access to "ensure can withdraw", everything for balance. 
+use support::traits::{Currency}; // Other avail traits lockablecurrency, onfreebalancezero, etc.
 
 
 pub trait Trait: system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
+
+// Asset owners can create a DebtRequest to ask for a traunche of Balance
+pub struct DebtRequest<Hash, AccountId, Currency, Moment> {   //Needs the blake2 Hash trait
+	id: Hash,								// DebtRequestId
+	requestor: AccountId,		// Account that will go in debt
+	beneficiary: AccountId,	// Recipient of Balance
+	amount: Currency,				// Amount of loan
+	expiry: Moment,					// Duration of debtRequest
+	collateralized: bool,		// Defaults to false, true upon collaterlization
+}
+
 decl_storage! {
-	trait Store for Module<T: Trait> as TemplateModule {
-		// Just a dummy storage item. 
-		// Here we are declaring a StorageValue, `Something` as a Option<u32>
-		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
-		Something get(something): Option<u32>;
+	trait Store for Module<T: Trait> as Collateral {
+		
+		DebtRequests get(get_debt_order): map T::Hash => DebtRequest<T::Hash>;
+
+
 	}
 }
 
@@ -21,30 +40,32 @@ decl_module! {
 		
 		fn deposit_event<T>() = default;
 
-		// Just a dummy entry point.
-		// function that can be called by the external world as an extrinsics call
-		// takes a parameter of the type `AccountId`, stores it and emits an event
-		pub fn do_something(origin, something: u32) -> Result {
-			// TODO: You only need this if you want to check it was signed.
-			let who = ensure_signed(origin)?;
+		// DEBTOR:
+		// pub fn create_debt_request
 
-			// TODO: Code to execute when something calls this.
-			// For example: the following line stores the passed in u32 in the storage
-			<Something<T>>::put(something);
+		// pub fn collateralize_debt_request
 
-			
-			Self::deposit_event(RawEvent::SomethingStored(something, who));
-			Ok(())
-		}
+
+		// LOANER: 
+		// pub fn fill_debt_order
+
+		
+
+		// SYSTEM:     		// Removes the need for a trusted contract, etc. system maintains
+		// fn return_collateral
+		// fn seize_collateral
+
+
+		// on_intialize().. // 
+
+
 	}
 }
 
 decl_event!(
 	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
-		// Just a dummy event.
-		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
-		// To emit this event, we call the deposit funtion, from our runtime funtions
-		SomethingStored(u32, AccountId),
+		
+		// SomethingStored(u32, AccountId),
 	}
 );
 
