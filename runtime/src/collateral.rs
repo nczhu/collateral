@@ -4,11 +4,10 @@
 */
 
 use crate::erc721;		// our ERC 721 implementation
-
 use support::{decl_module, decl_storage, decl_event, 
 	StorageValue, StorageMap,
-	dispatch::Result, 
-	ensure //ensure is a macro from support/src/lib
+	//dispatch::Result, 
+	//ensure //ensure is a macro from support/src/lib
 	}; 
 use system::ensure_signed;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
@@ -23,7 +22,7 @@ use runtime_primitives::traits::{Hash}; // Zero, As
 // This module's traits
 // things used by fns in dclr modules need to be included in here.
 // dont be redudant , i.e. timestamp includes system, and erc721 includes balances, so can omit here
-pub trait Trait: timestamp::Trait + erc721::Trait {
+pub trait Trait: timestamp::Trait + erc721::Trait { //+ erc721::Trait 
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
@@ -165,7 +164,7 @@ mod tests {
 	use runtime_io::with_externalities;
 	use primitives::{H256, Blake2Hasher};
 	use support::{impl_outer_origin, 
-		assert_ok, //assert_noop, assert_eq_uvec
+		assert_ok, // assert_noop, assert_eq_uvec
 	};
 	use runtime_primitives::{
 		BuildStorage,
@@ -212,13 +211,18 @@ mod tests {
 		type OnTimestampSet = ();
 	}
 
+	impl erc721::Trait for Test{
+		type Event = ();
+	}
+
 	// this module, implements the traits.
 	impl Trait for Test {
 		type Event = ();
 		// any custom traits from this module?
 	}
 
-	// shorthand?
+
+	// Alias
 	type Collateral = Module<Test>;
 
 	// This function basically just builds a genesis storage key/value store according to
@@ -227,25 +231,14 @@ mod tests {
 		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
 	}
 
-	// #[test]
-	// fn asdf() {
-	// 	with_externalities(&mut new_test_ext(), || {
-	// 		assert_eq!(1,1);
-	// 		assert_ok!(Collateral::create_debt_request(
-	// 			Origin::signed(1),
-	// 			// amount: T::Balance, beneficiary: T::AccountId, expiry: u64
-	// 			));
-	// 	});
-	// }
-
 	#[test]
-	fn it_works_for_default_value() {
+	fn should_pass() {
 		with_externalities(&mut new_test_ext(), || {
-			// Just a dummy test for the dummy funtion `do_something`
-			// calling the `do_something` function with a value 42
-			assert_ok!(Collateral::do_something(Origin::signed(1), 42));
-			// asserting that the stored value is equal to what we stored
-			assert_eq!(Collateral::something(), Some(42));
+			// assert_ok!(Collateral::create_debt_request(
+			// 	Origin::signed(1),
+			// 	// amount: T::Balance, beneficiary: T::AccountId, expiry: u64
+			// 	));
 		});
 	}
+
 }

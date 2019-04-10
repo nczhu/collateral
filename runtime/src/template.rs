@@ -113,6 +113,7 @@ mod tests {
 	}
 
 	#[test]
+	#[ignore]
 	fn it_works_for_default_value() {
 		with_externalities(&mut new_test_ext(), || {
 			// Just a dummy test for the dummy funtion `do_something`

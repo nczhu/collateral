@@ -327,76 +327,76 @@ impl<T: Trait> Module<T> {
 
 // TESTING
 
-#[cfg(test)]
-mod tests {
-    use super::*; // just rust test layout
+// #[cfg(test)]
+// mod tests {
+//     use super::*; // just rust test layout
 
-    use primitives::{H256, Blake2Hasher}; //called substrate_primitives as primitives
-    use runtime_primitives::{
-        BuildStorage,
-        traits::{IdentityLookup, BlakeTwo256}, // Test wrapper for this specific type/ looks up the identity; returns Result
-        testing::{Digest, DigestItem, Header}
-    };
-    use support::{impl_outer_origin};
-    use runtime_io::{TestExternalities}; //to set up the block for tests
+//     use primitives::{H256, Blake2Hasher}; //called substrate_primitives as primitives
+//     use runtime_primitives::{
+//         BuildStorage,
+//         traits::{IdentityLookup, BlakeTwo256}, // Test wrapper for this specific type/ looks up the identity; returns Result
+//         testing::{Digest, DigestItem, Header}
+//     };
+//     use support::{impl_outer_origin};
+//     use runtime_io::{TestExternalities}; //to set up the block for tests
 
-    // impl outer origin
-    impl_outer_origin! {
-        pub enum Origin for ERCTest {}
-    }
+//     // impl outer origin
+//     impl_outer_origin! {
+//         pub enum Origin for ERCTest {}
+//     }
 
-    // 2. Set up mock runtime
-    #[derive(Clone, PartialEq, Eq, Debug)]
-    pub struct ERCTest; // can call thsi anything Runtime or Test...
+//     // 2. Set up mock runtime
+//     #[derive(Clone, PartialEq, Eq, Debug)]
+//     pub struct ERCTest; // can call thsi anything Runtime or Test...
 
-    impl system::Trait for ERCTest {
-        type Origin = Origin;  // these types are declared in the module traits, so they must be ste
-        type Index = u64;       //hack it to just be a u64 int (later: double check the actual type?)
-        type BlockNumber = u64;
-        type Hash = H256;
-        type Hashing = BlakeTwo256; //from runtime_primitives::traits::blaketwo256
-        type Digest = Digest;
-        type AccountId = u64;
-        type Lookup = IdentityLookup<Self::AccountId>;
-        type Header = Header;
-        type Event = ();
-        type Log = DigestItem;
-    }
+//     impl system::Trait for ERCTest {
+//         type Origin = Origin;  // these types are declared in the module traits, so they must be ste
+//         type Index = u64;       //hack it to just be a u64 int (later: double check the actual type?)
+//         type BlockNumber = u64;
+//         type Hash = H256;
+//         type Hashing = BlakeTwo256; //from runtime_primitives::traits::blaketwo256
+//         type Digest = Digest;
+//         type AccountId = u64;
+//         type Lookup = IdentityLookup<Self::AccountId>;
+//         type Header = Header;
+//         type Event = ();
+//         type Log = DigestItem;
+//     }
 
-    impl balances::Trait for ERCTest {
-        type Balance = u64; //hack it to be a u64 figure
-        type OnFreeBalanceZero = (); //overrides. () is to use the default. 
-        type OnNewAccount = ();
-        type TransactionPayment = ();
-        type TransferPayment = ();
-        type DustRemoval = ();
-        type Event = ();
-    }
+//     impl balances::Trait for ERCTest {
+//         type Balance = u64; //hack it to be a u64 figure
+//         type OnFreeBalanceZero = (); //overrides. () is to use the default. 
+//         type OnNewAccount = ();
+//         type TransactionPayment = ();
+//         type TransferPayment = ();
+//         type DustRemoval = ();
+//         type Event = ();
+//     }
 
-    // impl the types for this particular trait!
-    impl Trait for ERCTest{
-        type Event = ();
-    }
+//     // impl the types for this particular trait!
+//     impl Trait for ERCTest{
+//         type Event = ();
+//     }
     
-    type Erc721 = Module<ERCTest>; // i needthis.?
+//     type Erc721 = Module<ERCTest>; // i needthis.?
 
-    // Tests begin
-    // do more complicated tests later
-    // fn new_test_ext() -> TestExternalities<Blake2Hasher> {
-    //     // todo: any genesis config needed ?
-    //     // Later todo: to extend, set configs() etc.
-    // }
-    fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-        system::GenesisConfig::<ERCTest>::default().build_storage().unwrap().0.into()
-    }
+//     // Tests begin
+//     // do more complicated tests later
+//     // fn new_test_ext() -> TestExternalities<Blake2Hasher> {
+//     //     // todo: any genesis config needed ?
+//     //     // Later todo: to extend, set configs() etc.
+//     // }
+//     fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
+//         system::GenesisConfig::<ERCTest>::default().build_storage().unwrap().0.into()
+//     }
 
-    // TODO: write the first test
-    #[test]
-    fn alice_can_create_token() {
-        // let mut ext = TestExternalities::<Blake2Hasher>::default();
-        assert!(true);
-    }
-}
+//     // TODO: write the first test
+//     #[test]
+//     fn alice_can_create_token() {
+//         // let mut ext = TestExternalities::<Blake2Hasher>::default();
+//         assert!(true);
+//     }
+// }
 
 
 
