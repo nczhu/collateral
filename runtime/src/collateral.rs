@@ -51,9 +51,9 @@ pub enum OrderStatus {
 	Defaulted,		// unpaid, collat seized
 }
 
+// Otherwise Rustc will Complain that i dont have default for orderstatus
 impl Default for OrderStatus {
-	// returns 
-	fn default() -> OrderStatus { OrderStatus::Defaulted }
+	fn default() -> OrderStatus { OrderStatus::Open }
 }
 
 // Created upon successful collateralization
@@ -61,13 +61,12 @@ impl Default for OrderStatus {
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct DebtOrder<Hash, AccountId, Moment> {
 	id: Hash, 
-	requestId: Hash,				// corresponding DebtRequestId
+	request_id: Hash,				// corresponding DebtRequestId
 	status: OrderStatus,		// status of this order
 	creditor: AccountId,
 	// Input by debtor
 	// TODO: expiry should be Option<Moment>. so it defaults to None
-	// unless moment already defaults to None?
-	expiry: Moment,					// Due date for all payment
+	expiry: Moment,					// unless moment already defaults to None?
 	// TODO collateral of tokens...  // a fixed length array of tokens collateralized in system escrow
 }
 
@@ -108,7 +107,7 @@ decl_module! {
 
 			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
 			// ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
-			let new_debt_request = DebtRequest {id, requestor, beneficiary, amount, expiry, collateralized};
+			let new_debt_request = DebtRequest {id, requestor, beneficiary: beneficiary.clone(), amount, expiry, collateralized};
 
 			// Add new debt request to DebtRequests map
 			let i = Self::get_total_debt_requests();
@@ -116,7 +115,7 @@ decl_module! {
 			<DebtRequests<T>>::insert(i, new_debt_request);
 			
 			// emit the event TODO: figure out how to emit debt details later
-			Self::deposit_event(RawEvent::DebtRequestCreated(9, requestor));
+			Self::deposit_event(RawEvent::DebtRequestCreated(9, beneficiary));
 		}
 
 
@@ -141,10 +140,11 @@ decl_module! {
 // }
 
 decl_event!(
-	pub enum Event<T> where
-		AccountId = <T as system::Trait>::AccountId 
-	{	
-		DebtRequestCreated(u32, AccountId),
+	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
+		// Just a dummy event.
+		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
+		// To emit this event, we call the deposit funtion, from our runtime funtions
+		DebtRequestCreated(u64, AccountId),
 	}
 );
 
