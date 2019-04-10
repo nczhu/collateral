@@ -11,7 +11,7 @@ use support::{decl_module, decl_storage, decl_event,
 	}; 
 use system::ensure_signed;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
-use runtime_primitives::traits::{Hash}; // Zero, As
+use runtime_primitives::traits::{Hash, StaticLookup}; // Zero, As //static look up is for beneficiary address
 
 // import currency trait, to get access to "ensure_can_withdraw", everything for balance. 
 // use support::traits::{Currency}; // Other avail traits lockablecurrency, onfreebalancezero, etc.
@@ -92,7 +92,12 @@ decl_module! {
 		fn deposit_event<T>() = default;
 
 		// DEBTOR FUNCTIONS: 
-		pub fn create_debt_request(origin, amount: T::Balance, beneficiary: T::AccountId, expiry: T::Moment) { //TODO, change expiry
+		pub fn create_debt_request(
+				origin, 
+				amount: T::Balance, 
+				beneficiary: <T::Lookup as StaticLookup>::Source, 
+				expiry: T::Moment
+		) { //TODO, change expiry
 			let requestor = ensure_signed(origin)?;		//macro, returns sender address
 
 			// TODO initial check
@@ -103,6 +108,8 @@ decl_module! {
 			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
 			let id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash); // use runtime_primitives::hash, its a constnat!
 			let collateralized = false;
+
+			let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
 
 			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
 			// ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
@@ -183,6 +190,7 @@ mod tests {
 	pub struct Test;
 
 	impl system::Trait for Test {
+		// We are just aliasing the types with the type, or some easier abstration!!
 		type Origin = Origin;
 		type Index = u64;
 		type BlockNumber = u64;
@@ -196,8 +204,9 @@ mod tests {
 		type Log = DigestItem;
 	}
 
+	// code above inherits but still have to declare it in test
 	impl balances::Trait for Test {
-		type Balance = u64;			// using u64 to mock balance
+		type Balance = u64;			// aliasing u64 as "balance" to mock the balance
 		type OnFreeBalanceZero = ();
 		type OnNewAccount = ();
 		type Event = ();
@@ -221,9 +230,9 @@ mod tests {
 		// any custom traits from this module?
 	}
 
-
-	// Alias
+	// Alias the module names
 	type Collateral = Module<Test>;
+	type Balance = balances::Module<Test>; // what does this alias?
 
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
@@ -231,13 +240,23 @@ mod tests {
 		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
 	}
 
+
+// beneficiary: <T::Lookup as StaticLookup>::Source
+// 		) {
+// 			let proposer = ensure_signed(origin)?;
+// 			let beneficiary = T::Lookup::lookup(beneficiary)?; //returns the Target acct, or error
+
 	#[test]
-	fn should_pass() {
+	fn should_create_debt_request() {
 		with_externalities(&mut new_test_ext(), || {
-			// assert_ok!(Collateral::create_debt_request(
-			// 	Origin::signed(1),
-			// 	// amount: T::Balance, beneficiary: T::AccountId, expiry: u64
-			// 	));
+			//       uses the Alias
+			assert_ok!(Collateral::create_debt_request(
+				Origin::signed(0),
+				5,			// amount: T::Balance, 
+				1,			// beneficiary, some u64, AccountId
+				12345			// expiry: Moment
+			));
+
 		});
 	}
 
