@@ -39,7 +39,7 @@ pub struct DebtRequest<Hash, AccountId, Balance, Moment> {   //Needs the blake2 
 }
 
 /// Status of the collateralized debt
-#[derive(Encode, Decode, Clone, Copy, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
+#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum OrderStatus {
 	/// loan is never filled, expired
@@ -101,21 +101,18 @@ decl_module! {
 				expiry: T::Moment
 		) { //TODO, change expiry
 			let requestor = ensure_signed(origin)?;		//macro, returns sender address
-
-			// TODO: just check expiry is not before today
 			let now = <timestamp::Module<T>>::get();
 
 			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
 			let id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash); // use runtime_primitives::hash, its a constnat!
 			let collateralized = false;
-
 			let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
 
 			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
-			ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt already exists");
+			ensure!(!<DebtRequests<T>>::exists(&id), "Error: Debt request already exists");
 			let new_debt_request = DebtRequest {
-				id,
-				requestor,
+				id: id.clone(),
+				requestor: requestor.clone(),
 				beneficiary: beneficiary.clone(), 	// can i do this here?!
 				amount,
 				expiry,
@@ -128,10 +125,14 @@ decl_module! {
 			<DebtRequestIndexToId<T>>::insert(i, &id);
 			<DebtRequests<T>>::insert(id, new_debt_request);
 			
-			// emit the event TODO: figure out how to emit debt details later
-			Self::deposit_event(RawEvent::DebtRequestCreated(9, beneficiary));
+			// Emit the event
+			Self::deposit_event(RawEvent::DebtRequestCreated(requestor, id));
 		}
 
+		// Debtor can invoke this function to collateralize their debts
+		pub fn collateralize_debt_request() {
+
+		}
 
 		// pub fn collateralize_debt_request (stake n tokens?)
 
@@ -154,11 +155,12 @@ decl_module! {
 // }
 
 decl_event!(
-	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
-		// Just a dummy event.
-		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
-		// To emit this event, we call the deposit funtion, from our runtime funtions
-		DebtRequestCreated(u64, AccountId),
+	pub enum Event<T> where 
+		<T as system::Trait>::AccountId,
+		<T as system::Trait>::Hash,
+	{
+		// 								debtor, requestId
+		DebtRequestCreated(AccountId, Hash),
 	}
 );
 
@@ -172,8 +174,9 @@ mod tests {
 	use runtime_io::with_externalities;
 	use primitives::{H256, Blake2Hasher};
 	use support::{impl_outer_origin, 
-		assert_ok, // assert_noop, assert_eq_uvec
+		assert_ok, assert_noop
 	};
+
 	use runtime_primitives::{
 		BuildStorage,
 		traits::{BlakeTwo256, IdentityLookup},
@@ -231,9 +234,10 @@ mod tests {
 		// any custom traits from this module?
 	}
 
-	// Alias the module names
+	// Alias the module names for easy usage
 	type Collateral = Module<Test>;
-	type Balance = balances::Module<Test>; // what does this alias?
+	type Balance = balances::Module<Test>;
+	type Timestamp = timestamp::Module<Test>;
 
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
@@ -241,27 +245,17 @@ mod tests {
 		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
 	}
 
-
-// beneficiary: <T::Lookup as StaticLookup>::Source
-// 		) {
-// 			let proposer = ensure_signed(origin)?;
-// 			let beneficiary = T::Lookup::lookup(beneficiary)?; //returns the Target acct, or error
-
+	// UNIT Tests
 	#[test]
 	fn should_create_debt_request() {
 		with_externalities(&mut new_test_ext(), || {
 			//       uses the Alias
-			assert_ok!(Collateral::create_debt_request(
-				Origin::signed(0),
-				5,			// amount: T::Balance, 
-				1,			// beneficiary, some u64, AccountId
-				12345			// expiry: Moment
-			));
+			assert_ok!(Collateral::create_debt_request(Origin::signed(0), 5, 1, 12345));
+
+			// Timestamp hasn't incremented, so hash should stay the time
+			assert_noop!(Collateral::create_debt_request( Origin::signed(0), 5, 1, 12345),
+			"Error: Debt request already exists");
 		});
-	}
-
-	fn should_not_override_debt_request() {
-
 	}
 
 	fn should_not_create_expired_debt_requests() {
