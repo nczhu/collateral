@@ -130,11 +130,24 @@ decl_module! {
 		}
 
 		// Debtor can invoke this function to collateralize their debts
-		pub fn collateralize_debt_request() {
+		pub fn collateralize_debt_request(origin, token_id: T::Hash, request_id: T::Hash) {
+			// TODO: check sender is debtor
+			let requestor = ensure_signed(origin)?;
+
+			// TODO check request is not expired
+			// TODO: check request is not collateralized
+
+			// TODO: check token id is approved for recipient address
+			
+			// TODO: transfer the token
+
+			// TODO: Mark request as collteralized
+
+			// TODO: debt order is created  
+
+			// TODO: event is emitted
 
 		}
-
-		// pub fn collateralize_debt_request (stake n tokens?)
 
 		// pub fn pay_back_debt() // has to be a one time payment...
 
