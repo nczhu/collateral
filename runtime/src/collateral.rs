@@ -172,8 +172,9 @@ mod tests {
 	use runtime_io::with_externalities;
 	use primitives::{H256, Blake2Hasher};
 	use support::{impl_outer_origin, 
-		assert_ok, // assert_noop, assert_eq_uvec
+		assert_ok, assert_noop
 	};
+
 	use runtime_primitives::{
 		BuildStorage,
 		traits::{BlakeTwo256, IdentityLookup},
@@ -257,6 +258,14 @@ mod tests {
 				1,			// beneficiary, some u64, AccountId
 				12345			// expiry: Moment
 			));
+
+			assert_noop!(Collateral::create_debt_request(
+				Origin::signed(0),
+				5,			// amount: T::Balance, 
+				1,			// beneficiary, some u64, AccountId
+				12345			// expiry: Moment
+			), "Error: Debt already exists");
+
 		});
 	}
 
