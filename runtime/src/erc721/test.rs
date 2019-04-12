@@ -4,7 +4,7 @@ use super::*;
 use support::{impl_outer_origin};
 use runtime_io::with_externalities;
 use primitives::{H256, Blake2Hasher}; //called substrate_primitives as primitives
-use support::{assert_ok};
+use support::{assert_ok, assert_noop};
 use runtime_primitives::{
     BuildStorage,
     traits::{IdentityLookup, BlakeTwo256}, // Test wrapper for this specific type/ looks up the identity; returns Result
@@ -68,7 +68,14 @@ fn can_collateralize_token() {
     // let mut ext = TestExternalities::<Blake2Hasher>::default();
     with_externalities(&mut new_test_ext(), || {
         assert_ok!(ERC::create_token(Origin::signed(0)));
-        assert_ok!(ERC::collateralize_token(Origin::signed(0), 1, H256::zero()));
+        assert_ok!(ERC::collateralize_tokens(Origin::signed(0), 1, H256::zero()));
+        // owner shouldn't have token
+        assert_eq!(ERC::balance_of(0), 0);
+        // token shouldn't have owner
+        assert!(ERC::owner_of(ERC::token_by_index(0)).is_none());
+        // ERC::owner_of(ERC::token_by_index(0))
+        // owner shouldn't have token
+        assert_eq!(ERC::total_supply(), 1); //total supply shouldn't change
     });
 }
 

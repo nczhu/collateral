@@ -139,7 +139,7 @@ decl_module! {
         // User can collateralize n token for any reason (referenced by a hash ptr)
         // After that, the token is no longer "owned" by the user
         // Later: assume you can collateralize by a specific token ID
-        pub fn collateralize_token(origin, n: u64, reason: T::Hash) {
+        pub fn collateralize_tokens(origin, n: u64, reason: T::Hash) {
             // "Locks" token from leaving 
             let sender = ensure_signed(origin)?;
 
@@ -152,7 +152,7 @@ decl_module! {
         // Gives collateralized token to an account
         // Can be debtor, or creditor
         // Only collable by the system
-        pub fn uncollateralize_token(to: T::AccountId, token_id: T::Hash) {
+        pub fn uncollateralize_tokens(to: T::AccountId, reason: T::Hash) {
 
         }
 
@@ -179,7 +179,7 @@ impl<T: Trait> Module<T> {
             Self::_remove_token_from_owner_enumeration(sender.clone(), token_id)?;
             Self::_clear_approval(token_id)?;
             <OwnedTokensCount<T>>::insert(&sender, new_balance);
-            // TODO: update tokenowner
+            <TokenOwner<T>>::remove(token_id);
 
             //Add to escrow
             <Escrow<T>>::insert(token_id, reason);
