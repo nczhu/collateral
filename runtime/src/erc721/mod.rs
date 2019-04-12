@@ -7,7 +7,13 @@
 /// For more guidance on Substrate modules, see the example module
 /// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
 
-use support::{decl_module, decl_storage, decl_event, ensure, StorageValue, StorageMap, dispatch::Result};
+/// Collateral: functions for dealing with a collateralizable nonfungible token
+
+use support::{
+    decl_module, decl_storage, decl_event, 
+    ensure, 
+    StorageValue, StorageMap,
+    dispatch::Result};
 use system::ensure_signed;
 
 // @nczhu: added
@@ -54,6 +60,10 @@ decl_storage! {
         OwnedTokensIndex: map T::Hash => u64;
         // Start ERC721 : Enumerable : Storage & Getters //
 
+        // @nczhu: Mapping of a token_id to whats its collateralized for
+        Escrow get(is_escrowed): map T::Hash => T::Hash;
+        // TODO, make escrows enumerable? or associated with teh people?
+        
         // Not a part of the ERC721 specification, but used in random token generation
         Nonce: u64;
     }
@@ -65,7 +75,7 @@ decl_module! {
         fn deposit_event<T>() = default;
 
         // Start ERC721 : Public Functions //
-        fn approve(origin, to: T::AccountId, token_id: T::Hash) -> Result {
+        pub fn approve(origin, to: T::AccountId, token_id: T::Hash) -> Result {
             let sender = ensure_signed(origin)?;
             let owner = match Self::owner_of(token_id) {
                 Some(c) => c,
@@ -82,7 +92,7 @@ decl_module! {
             Ok(())
         }
 
-        fn set_approval_for_all(origin, to: T::AccountId, approved: bool) -> Result {
+        pub fn set_approval_for_all(origin, to: T::AccountId, approved: bool) -> Result {
             let sender = ensure_signed(origin)?;
             ensure!(to != sender, "You are already implicity approved for your own actions");
             <OperatorApprovals<T>>::insert((sender.clone(), to.clone()), approved);
@@ -93,7 +103,7 @@ decl_module! {
         }
 
         // transfer_from will transfer to addresses even without a balance
-        fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::Hash) -> Result {
+        pub fn transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::Hash) -> Result {
             let sender = ensure_signed(origin)?;
             ensure!(Self::_is_approved_or_owner(sender, token_id), "You do not own this token");
 
@@ -104,7 +114,7 @@ decl_module! {
 
         // safe_transfer_from checks that the recieving address has enough balance to satisfy the ExistentialDeposit
         // This is not quite what it does on Ethereum, but in the same spirit...
-        fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::Hash) -> Result {
+        pub fn safe_transfer_from(origin, from: T::AccountId, to: T::AccountId, token_id: T::Hash) -> Result {
             let to_balance = <balances::Module<T>>::free_balance(&to);
             ensure!(!to_balance.is_zero(), "'to' account does not satisfy the `ExistentialDeposit` requirement");
 
@@ -115,7 +125,7 @@ decl_module! {
         // End ERC721 : Public Functions //
 
         // Not part of ERC721, but allows you to play with the runtime
-        fn create_token(origin) -> Result {
+        pub fn create_token(origin) -> Result {
             let sender = ensure_signed(origin)?;
             let nonce = <Nonce<T>>::get();
             let random_hash = (<system::Module<T>>::random_seed(), &sender, nonce).using_encoded(<T as system::Trait>::Hashing::hash);
@@ -125,10 +135,58 @@ decl_module! {
 
             Ok(())
         }
+
+        // User can collateralize n token for any reason (referenced by a hash ptr)
+        // After that, the token is no longer "owned" by the user
+        // Later: assume you can collateralize by a specific token ID
+        pub fn collateralize_token(origin, n: u64, reason: T::Hash) {
+            // "Locks" token from leaving 
+            let sender = ensure_signed(origin)?;
+
+            Self::_put_in_escrow(sender, n, reason)?;
+
+            // TODO: emit some event here
+        }
+
+        // Only callable by the system
+        // Gives collateralized token to an account
+        // Can be debtor, or creditor
+        // Only collable by the system
+        pub fn uncollateralize_token(to: T::AccountId, token_id: T::Hash) {
+
+        }
+
     }
 }
 
 impl<T: Trait> Module<T> {
+
+    fn _put_in_escrow(sender: T::AccountId, n: u64, reason: T::Hash) -> Result {
+        let token_balance = Self::balance_of(&sender);
+        
+        // check n isn't some insane number
+        ensure!(token_balance >= n, "Not enough tokens to collateralize");
+
+        for i in 0..n {                
+            let token_id = Self::token_of_owner_by_index((sender.clone(), i));
+            ensure!(Self::_is_approved_or_owner(sender.clone(), token_id), "You do not own this token");
+        
+            let new_balance = match token_balance.checked_sub(1) {
+                Some (c) => c,
+                None => return Err("Collateralizing causes underflow of token balance"),
+            };
+
+            Self::_remove_token_from_owner_enumeration(sender.clone(), token_id)?;
+            Self::_clear_approval(token_id)?;
+            <OwnedTokensCount<T>>::insert(&sender, new_balance);
+
+            //Add to escrow
+            <Escrow<T>>::insert(token_id, reason);
+        }
+
+        Ok(())
+    }
+
     // Start ERC721 : Internal Functions //
     fn _exists(token_id: T::Hash) -> bool {
         return <TokenOwner<T>>::exists(token_id);
