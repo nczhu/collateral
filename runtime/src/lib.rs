@@ -57,7 +57,6 @@ pub type Nonce = u64;
 
 /// Used for the module template in `./template.rs`
 mod template;
-
 mod erc721;
 mod debt;
 
