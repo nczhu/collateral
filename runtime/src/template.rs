@@ -11,7 +11,6 @@
 use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
 use system::ensure_signed;
 
-
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
 	// TODO: Add other types and constants required configure this module.
@@ -21,7 +20,6 @@ pub trait Trait: system::Trait {
 }
 
 /// This module's storage items.
-
 decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
 		// Just a dummy storage item. 
@@ -113,7 +111,6 @@ mod tests {
 	}
 
 	#[test]
-	#[ignore]
 	fn it_works_for_default_value() {
 		with_externalities(&mut new_test_ext(), || {
 			// Just a dummy test for the dummy funtion `do_something`

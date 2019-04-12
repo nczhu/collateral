@@ -15,6 +15,9 @@ use parity_codec::Encode; // serialization and deserialization codec for simple 
 use runtime_primitives::traits::{Hash, Zero};
 use rstd::prelude::*;
 
+#[cfg(test)] //tells compiler to compile based on "test" flag. i.e. its a test.
+mod test;
+
 /// The module's configuration trait.
 pub trait Trait: balances::Trait {
 
@@ -378,14 +381,8 @@ impl<T: Trait> Module<T> {
 //         type Event = ();
 //     }
     
-//     type Erc721 = Module<ERCTest>; // i needthis.?
+//     type Erc721 = Module<ERCTest>;
 
-//     // Tests begin
-//     // do more complicated tests later
-//     // fn new_test_ext() -> TestExternalities<Blake2Hasher> {
-//     //     // todo: any genesis config needed ?
-//     //     // Later todo: to extend, set configs() etc.
-//     // }
 //     fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 //         system::GenesisConfig::<ERCTest>::default().build_storage().unwrap().0.into()
 //     }
