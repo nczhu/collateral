@@ -139,11 +139,11 @@ decl_module! {
         // User can collateralize n token for any reason (referenced by a hash ptr)
         // After that, the token is no longer "owned" by the user
         // Later: assume you can collateralize by a specific token ID
-        pub fn collateralize_tokens(origin, n: u64, reason: T::Hash) {
+        pub fn collateralize_tokens(origin, token_id: T::Hash, reason: T::Hash) {
             // "Locks" token from leaving 
             let sender = ensure_signed(origin)?;
 
-            Self::_put_in_escrow(sender, n, reason)?;
+            Self::_put_in_escrow(sender, token_id, reason)?;
 
             // TODO: emit some event here
         }
@@ -152,7 +152,7 @@ decl_module! {
         // Gives collateralized token to an account
         // Can be debtor, or creditor
         // Only collable by the system
-        pub fn uncollateralize_tokens(to: T::AccountId, reason: T::Hash) {
+        pub fn uncollateralize_tokens(to: T::AccountId, token_id: T::Hash, reason: T::Hash) {
 
         }
 
@@ -161,29 +161,29 @@ decl_module! {
 
 impl<T: Trait> Module<T> {
 
-    fn _put_in_escrow(sender: T::AccountId, n: u64, reason: T::Hash) -> Result {
+    fn _put_in_escrow(sender: T::AccountId, token_id: T::Hash, reason: T::Hash) -> Result {
+        let owner = match Self::owner_of(token_id) {
+            Some(c) => c,
+            None => return Err("No owner for this token"),
+        };
+
+        ensure!(owner == sender, "You do not own this token");
+            
         let token_balance = Self::balance_of(&sender);
-        
-        // check n isn't some insane number
-        ensure!(token_balance >= n, "Not enough tokens to collateralize");
 
-        for i in 0..n {                
-            let token_id = Self::token_of_owner_by_index((sender.clone(), i));
-            ensure!(Self::_is_approved_or_owner(sender.clone(), token_id), "You do not own this token");
-        
-            let new_balance = match token_balance.checked_sub(1) {
-                Some (c) => c,
-                None => return Err("Collateralizing causes underflow of token balance"),
-            };
+        let new_balance = match token_balance.checked_sub(1) {
+            Some (c) => c,
+            None => return Err("Collateralizing causes underflow of token balance"),
+        };
 
-            Self::_remove_token_from_owner_enumeration(sender.clone(), token_id)?;
-            Self::_clear_approval(token_id)?;
-            <OwnedTokensCount<T>>::insert(&sender, new_balance);
-            <TokenOwner<T>>::remove(token_id);
+        Self::_remove_token_from_owner_enumeration(sender.clone(), token_id)?;
+        Self::_clear_approval(token_id)?;
+        <OwnedTokensCount<T>>::insert(&sender, new_balance);
+        <TokenOwner<T>>::remove(token_id);
 
-            //Add to escrow
-            <Escrow<T>>::insert(token_id, reason);
-        }
+        //Add to escrow
+        <Escrow<T>>::insert(token_id, reason);
+
 
         Ok(())
     }

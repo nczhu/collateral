@@ -1,7 +1,7 @@
-// /* Used / Learned: 
-// 	- Currency trait
-// 	- Moment trait
-// */
+// // // /* Used / Learned: 
+// // // 	- Currency trait
+// // // 	- Moment trait
+// // // */
 
 // // use crate::erc721;		// our ERC 721 implementation
 // use support::{decl_module, decl_storage, decl_event, 
