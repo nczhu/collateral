@@ -179,6 +179,7 @@ impl<T: Trait> Module<T> {
             Self::_remove_token_from_owner_enumeration(sender.clone(), token_id)?;
             Self::_clear_approval(token_id)?;
             <OwnedTokensCount<T>>::insert(&sender, new_balance);
+            // TODO: update tokenowner
 
             //Add to escrow
             <Escrow<T>>::insert(token_id, reason);

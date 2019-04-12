@@ -56,10 +56,19 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 }
 
 #[test]
-fn alice_can_create_token() {
+fn can_create_token() {
     // let mut ext = TestExternalities::<Blake2Hasher>::default();
     with_externalities(&mut new_test_ext(), || {
         assert_ok!(ERC::create_token(Origin::signed(0)));
-        assert!(true);
     });
 }
+
+#[test]
+fn can_collateralize_token() {
+    // let mut ext = TestExternalities::<Blake2Hasher>::default();
+    with_externalities(&mut new_test_ext(), || {
+        assert_ok!(ERC::create_token(Origin::signed(0)));
+        assert_ok!(ERC::collateralize_token(Origin::signed(0), 1, H256::zero()));
+    });
+}
+
