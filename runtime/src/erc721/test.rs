@@ -57,6 +57,7 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 }
 
 #[test]
+#[ignore]
 fn can_create_token() {
     // let mut ext = TestExternalities::<Blake2Hasher>::default();
     with_externalities(&mut new_test_ext(), || {
@@ -65,6 +66,7 @@ fn can_create_token() {
 }
 
 #[test]
+#[ignore]
 fn can_collateralize_token() {
     // let mut ext = TestExternalities::<Blake2Hasher>::default();
     with_externalities(&mut new_test_ext(), || {

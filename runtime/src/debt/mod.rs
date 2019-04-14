@@ -92,7 +92,7 @@ decl_module! {
 
 		pub fn borrow(
 				origin, 
-				beneficiary: <T::Lookup as StaticLookup>::Source, 
+				beneficiary: T::AccountId, 
 				request_expiry: T::Moment, 
 				principal: BalanceOf<T>, //make compact?
 				interest_rate: u64,
@@ -104,26 +104,27 @@ decl_module! {
 
 			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
 			let debt_id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash); // use runtime_primitives::hash, its a constnat!
-			let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
-
-			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
+			// let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
+	
 			ensure!(!<Debts<T>>::exists(debt_id), "Error: Debt request already exists");
-			let new_debt = Debt {
-				requestor: requestor.clone(),
-				beneficiary,
-				request_expiry,
-				principal,
-				interest_rate,
-				interest_period,
-				term_length,
-				..Default::default()
-			};
-
+			
 			// Add new debt request to DebtRequests map
 			let i = Self::get_total_debts();
 			<DebtCount<T>>::put(i+1); //increment total count by 1
+
 			<DebtIndexToId<T>>::insert(i, debt_id);
-			<Debts<T>>::insert(debt_id, new_debt);
+
+			<Debts<T>>::insert(debt_id, Debt {
+													requestor: requestor.clone(),
+													beneficiary,
+													request_expiry,
+													principal,
+													interest_rate,
+													interest_period,
+													term_length,
+													..Default::default() //suspected culprit
+												}
+			);
 			// Emit the event
 
 			Self::deposit_event(RawEvent::DebtCreated(requestor, debt_id));
@@ -148,8 +149,12 @@ decl_module! {
 			// With the currency trait from balances<module<T>>
 			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
 
+			
 			debt.creditor = sender;
+			
 			debt.term_start = now;
+			// write to the state...
+			<Debts<T>>::insert(debt_id, debt);
 			
 			// TODO emit event
 		}
@@ -164,19 +169,25 @@ decl_module! {
 			ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
 			let mut debt = <Debts<T>>::get(debt_id);
 			ensure!(debt.status == Status::Active, "This debt is no longer active");
-			ensure!(now <= debt.term_start + debt.term_length, "This debt is past due");
+			
+			// TODO figure out safer way to add Moments 
+			let term_end = debt.term_start.clone() + debt.term_length.clone();
+			ensure!(now <= term_end, "This debt is past due");
 
 			// TODO: later enable multiple repayments
 			ensure!(value >= debt.principal, "You have to repay the debt in full");
 
+			
 			T::Currency::transfer(&sender, &debt.creditor, value)?;
 
 			// return collateral
-			<erc721::Module<T>>::uncollateralize_token(sender, debt_id)?;
+			<erc721::Module<T>>::uncollateralize_token(debt.requestor.clone(), debt_id)?;
 			// mark as completed
 
 			// TODO check if repaid
 			debt.status = Status::Repaid;
+
+			<Debts<T>>::insert(debt_id, debt);
 			// TODO update to non, remove from open queue
 
 			// TODO: emit an event
