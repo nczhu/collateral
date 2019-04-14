@@ -47,6 +47,7 @@ impl balances::Trait for Test {
 // impl the types for this particular trait!
 impl Trait for Test{
     type Event = ();
+    // type Currency = balances::Module<Test>;
 }
 
 type ERC = Module<Test>;

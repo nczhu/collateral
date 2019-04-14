@@ -17,6 +17,7 @@ pub trait Trait: system::Trait {
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+	
 }
 
 /// This module's storage items.

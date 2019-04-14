@@ -55,11 +55,13 @@ impl timestamp::Trait for Test {
 
 impl erc721::Trait for Test{
 	type Event = ();
+	// type Currency = Balance;
 }
 
 // this module, implements the traits.
 impl Trait for Test {
 	type Event = ();
+	type Currency = balances::Module<Test>;
 	// any custom traits from this module?
 }
 

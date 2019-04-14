@@ -14,6 +14,10 @@ use super::erc721;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
 use runtime_primitives::traits::{Hash, StaticLookup}; // Zero, As //static look up is for beneficiary address
 
+use support::traits::Currency;
+// replaces Balance type.
+type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
+
 #[cfg(test)]
 mod test;
 
@@ -23,6 +27,7 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+	type Currency: Currency<Self::AccountId>;
 }
 
 #[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
@@ -49,7 +54,7 @@ pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 	request_expiry: Moment,	// debt_request 
 	//TODO to refactor out into debt_terms (interval, interest rate, deadline)
 	// principle total, interest total, deadline
-	principal: Balance,			// Principal loan
+	principal: Balance,			// Principal loan Q: why Balance inside struct, not balanceof
 	interest_rate: u64,			// % charged on principal, for every interest period
 	interest_period: u64,		// monthly, daily, in seconds
 	term_length: u64, 			// repayment time, in seconds
@@ -65,7 +70,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as Debt {
 				// TODO later abstrate T::Hash into generic vars, so its not so long?
 		// doesn't get deleted
-		Debts get(get_debt): map T::Hash => Debt<T::AccountId, T::Balance, T::Moment>;
+		Debts get(get_debt): map T::Hash => Debt<T::AccountId, BalanceOf<T>, T::Moment>;
 		// [0, 0x...] [1, 0x...]
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
 		DebtCount get(get_total_debts): DebtIndex;  //Alias for u64
@@ -88,7 +93,7 @@ decl_module! {
 				origin, 
 				beneficiary: <T::Lookup as StaticLookup>::Source, 
 				request_expiry: T::Moment, 
-				principal: T::Balance,
+				principal: BalanceOf<T>, //make compact?
 				interest_rate: u64,
 				interest_period: u64,
 				term_length: u64
@@ -142,10 +147,9 @@ decl_module! {
 			// Check sender has enough balance
 			// Transfer the money
 
-			// todo sudo transfer!
-			// TODO ijmplement currency trait
-			// <balances::Module<T>>::transfer(sender, debt.beneficiary, debt.principal)?;
-			// debt.creditor = sender; 
+			// With the currency trait from balances<module<T>>
+			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal);
+			// debt.creditor = sender;
 			
 			// Add to active loan
 			// Sudo call transfer function...
