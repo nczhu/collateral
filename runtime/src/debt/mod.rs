@@ -13,7 +13,6 @@ use system::ensure_signed;
 use super::erc721;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
 use runtime_primitives::traits::{Hash, StaticLookup}; // Zero, As //static look up is for beneficiary address
-use primitives::H256;
 
 #[cfg(test)]
 mod test;
@@ -44,6 +43,7 @@ impl Default for Status {
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
 pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 	status: Status,					// Default is open
+	// todo, wrap this in Option<T::AccountId>
 	requestor: AccountId,		// Account that will go in debt
 	beneficiary: AccountId,	// Recipient of Balance
 	request_expiry: Moment,	// debt_request 
@@ -104,7 +104,7 @@ decl_module! {
 			ensure!(!<Debts<T>>::exists(debt_id), "Error: Debt request already exists");
 			let new_debt = Debt {
 				requestor: requestor.clone(),
-				beneficiary: beneficiary.clone(),
+				beneficiary,
 				request_expiry,
 				principal,
 				interest_rate,
@@ -133,25 +133,23 @@ decl_module! {
 
 			let now = <timestamp::Module<T>>::get();
 			ensure!(debt.request_expiry >= now, "This debt request has expired");
-			println!("====== 1 =====");
 			ensure!(debt.status == Status::Open, "This debt request is no longer available");
-			// ensure this field is invalid... not creditor yet...
-			println!("====== 2 =====");
 			ensure!(debt.creditor == <T as system::Trait>::AccountId::default(), "This debt request is fulfilled");
-			// // Assume that people will listen for "collateralize events, and they'll just know"
-			println!("====== 3 =====");
+			
 			let collateral = <erc721::Module<T>>::get_escrow(debt_id);
-			// // ensure that its not the default debt_id hash?
-			println!("====== 4 =====");
-			// check that collateral isn't the default
 			ensure!(collateral != <T as system::Trait>::Hash::default(), "This debt is not collateralized");
 			
 			// Check sender has enough balance
 			// Transfer the money
-			// set creditor 
 
-			// Change status, ...
+			// todo sudo transfer!
+			// TODO ijmplement currency trait
+			// <balances::Module<T>>::transfer(sender, debt.beneficiary, debt.principal)?;
+			// debt.creditor = sender; 
+			
 			// Add to active loan
+			// Sudo call transfer function...
+
 		}
 		
 

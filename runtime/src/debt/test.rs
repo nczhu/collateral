@@ -113,6 +113,7 @@ fn should_fulfill_request() {
 		
 	});
 }
+
 // #[test]
 // fn should_collateralize() {
 // 	with_externalities(&mut new_test_ext(), || { 
