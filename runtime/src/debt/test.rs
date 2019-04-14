@@ -141,13 +141,9 @@ fn can_repay() {
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
 			
-			// Actual testing
 			// repay should clear debt, return collateral
 			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 100));
-		
-			assert_eq!(1, ERC::balance_of(1));
-
-			assert_eq!(100, Balance::free_balance(&1));
+			assert_eq!(100, Balance::free_balance(&2));
     });
 }
 
