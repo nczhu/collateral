@@ -200,6 +200,7 @@ impl erc721::Trait for Runtime {
 
 impl debt::Trait for Runtime {
 	type Event = Event;
+	type Currency = Balances;
 }
 // impl collateral::Trait for Runtime {
 // 	type Event = Event;

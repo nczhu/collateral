@@ -55,11 +55,13 @@ impl timestamp::Trait for Test {
 
 impl erc721::Trait for Test{
 	type Event = ();
+	// type Currency = Balance;
 }
 
 // this module, implements the traits.
 impl Trait for Test {
 	type Event = ();
+	type Currency = balances::Module<Test>;
 	// any custom traits from this module?
 }
 
@@ -67,11 +69,23 @@ impl Trait for Test {
 type Debt = Module<Test>;
 type Balance = balances::Module<Test>;
 type Timestamp = timestamp::Module<Test>;
+type ERC = erc721::Module<Test>;
 
 // This function basically just builds a genesis storage key/value store according to
 // our desired mockup.
 fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-	system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+	let mut t = system::GenesisConfig::<Test>::default().build_storage().unwrap().0;
+	t.extend(balances::GenesisConfig::<Test>{
+		balances: vec![(0, 100),(1, 100),(2, 100)], //initializes some accts with balances
+		transaction_base_fee: 0,
+		transaction_byte_fee: 0,
+		transfer_fee: 0,
+		creation_fee: 0,
+		existential_deposit: 0,
+		vesting: vec![],
+	}.build_storage().unwrap().0);
+	// last step... what this do?
+	t.into()
 }
 
 // UNIT Tests
@@ -79,11 +93,41 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 fn should_create_debt_request() {
 	with_externalities(&mut new_test_ext(), || {
 		//       uses the Alias
-		assert_ok!(Debt::create_debt_request(Origin::signed(0), 5, 1, 12345));
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
 
 		// Timestamp hasn't incremented, so hash should stay the time
-		assert_noop!(Debt::create_debt_request( Origin::signed(0), 5, 1, 12345),
+		assert_noop!(Debt::borrow( Origin::signed(0), 0, 1, 100, 0, 0, 1),
 		"Error: Debt request already exists");
+	});
+}
+
+#[test]
+fn should_fulfill_request() {
+	with_externalities(&mut new_test_ext(), || {
+		// set up
+		ERC::create_token(Origin::signed(0));
+    let token_id = ERC::token_by_index(0);
+
+		//       uses the Alias
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
+		let debt_id = Debt::get_debt_id(0);
+
+		// Debt isn't collateralized yet
+		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_err());
+		
+		// should be able to fulfill debt
+		assert_ok!(ERC::collateralize_token(Origin::signed(0), token_id, debt_id));
+		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_ok());
+		assert_eq!(0, Balance::free_balance(&1));
+		assert_eq!(200, Balance::free_balance(&0));
+	
+	
+		// Check debt now has creditor
+
+
+		// should fail if is already issued
+		// 3rd person cannot fulfill debt... bc creditor exists now.
+		
 	});
 }
 

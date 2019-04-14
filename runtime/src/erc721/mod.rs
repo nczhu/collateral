@@ -20,16 +20,30 @@ use system::ensure_signed;
 use parity_codec::Encode; // serialization and deserialization codec for simple marshalling.
 use runtime_primitives::traits::{Hash, Zero};
 use rstd::prelude::*;
+// use support::traits::Currency;
+
 
 #[cfg(test)] //tells compiler to compile based on "test" flag. i.e. its a test.
 mod test;
+
+// TODO check if I need this:
+// type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
+// type PositiveImbalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::PositiveImbalance;
+// type NegativeImbalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::NegativeImbalance;
 
 /// The module's configuration trait.
 pub trait Trait: balances::Trait {
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+    // type Currency: Currency<Self::AccountId>;
 }
+
+// impl<T: Trait> Token for Module<T> {
+//     fn get_collateral(id: T::Hash) -> T::Hash {
+//         <Escrow>::get(id);
+//     }
+// }
 
 decl_event!(
     pub enum Event<T>
@@ -60,8 +74,8 @@ decl_storage! {
         OwnedTokensIndex: map T::Hash => u64;
         // Start ERC721 : Enumerable : Storage & Getters //
 
-        // @nczhu: Mapping of a token_id to whats its collateralized for
-        Escrow get(is_escrowed): map T::Hash => T::Hash;
+        // @nczhu: Mapping of reason to token_id collateralized for it
+        Escrow get(get_escrow): map T::Hash => T::Hash;
         // TODO, make escrows enumerable? or associated with teh people?
         
         // Not a part of the ERC721 specification, but used in random token generation
@@ -139,12 +153,14 @@ decl_module! {
         // User can collateralize n token for any reason (referenced by a hash ptr)
         // After that, the token is no longer "owned" by the user
         // Later: assume you can collateralize by a specific token ID
-        pub fn collateralize_tokens(origin, token_id: T::Hash, reason: T::Hash) {
+        pub fn collateralize_token(origin, token_id: T::Hash, reason: T::Hash) {
             // "Locks" token from leaving 
             let sender = ensure_signed(origin)?;
 
             Self::_put_in_escrow(sender, token_id, reason)?;
 
+            // TODO: invoke the trait?
+            // TODO call a sort of "on_dilution" hook
             // TODO: emit some event here
         }
 
@@ -152,7 +168,7 @@ decl_module! {
         // Gives collateralized token to an account
         // Can be debtor, or creditor
         // Only collable by the system
-        pub fn uncollateralize_tokens(to: T::AccountId, token_id: T::Hash, reason: T::Hash) {
+        pub fn uncollateralize_token(to: T::AccountId, token_id: T::Hash, reason: T::Hash) {
 
         }
 
@@ -182,7 +198,7 @@ impl<T: Trait> Module<T> {
         <TokenOwner<T>>::remove(token_id);
 
         //Add to escrow
-        <Escrow<T>>::insert(token_id, reason);
+        <Escrow<T>>::insert(reason, token_id);
 
 
         Ok(())
