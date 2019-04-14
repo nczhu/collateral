@@ -80,4 +80,3 @@ fn can_collateralize_token() {
         assert_eq!(ERC::total_supply(), 1); //total supply shouldn't change
     });
 }
-

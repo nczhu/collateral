@@ -168,7 +168,7 @@ decl_module! {
         // Gives collateralized token to an account
         // Can be debtor, or creditor
         // Only collable by the system
-        pub fn uncollateralize_token(to: T::AccountId, token_id: T::Hash, reason: T::Hash) {
+        pub fn uncollateralize_token(to: T::AccountId, reason: T::Hash) {
 
         }
 

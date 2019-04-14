@@ -120,29 +120,33 @@ fn should_fulfill_request() {
 		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_ok());
 		assert_eq!(0, Balance::free_balance(&1));
 		assert_eq!(200, Balance::free_balance(&0));
-	
-	
-		// Check debt now has creditor
 
-
-		// should fail if is already issued
 		// 3rd person cannot fulfill debt... bc creditor exists now.
-		
+		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_err());
+
 	});
 }
 
-// #[test]
-// fn should_collateralize() {
-// 	with_externalities(&mut new_test_ext(), || { 
-// 		Collateral::create_debt_request(Origin::signed(0), 5, 1, 12345);
-// 		let debtor = Origin::signed(0);
-// 		// outer call.      inner call                   dispatch
-// 		// owner needs to approve
+#[test]
+fn can_repay() {
+    with_externalities(&mut new_test_ext(), || {
 
-// 		let request_id = Collateral::get_debt_request_id(0);
-// 		// let token_id = erc721::token_by_index(0); // grab the first and only token
+    	// SETUP... is there a way to refactor this
+    	ERC::create_token(Origin::signed(0));
+    	let token_id = ERC::token_by_index(0);
+			Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1);
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(0), token_id, debt_id);
+			Debt::fulfill(Origin::signed(1), debt_id).is_ok();
 
-// 		// assert_ok!(Collateral::collateralize_debt_request(debtor, token_id, request_id ));
-// 	});
-// }	
+			// Actual testing
+			// repay should clear debt, return collateral
+			assert_ok!(Debt::repay(Origin::signed(0), debt_id, 100));
+			
+    });
+}
+
+
+
+
 
