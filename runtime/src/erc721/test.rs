@@ -69,7 +69,7 @@ fn can_collateralize_token() {
     with_externalities(&mut new_test_ext(), || {
         assert_ok!(ERC::create_token(Origin::signed(0)));
         let token_id = ERC::token_by_index(0);
-        assert_ok!(ERC::collateralize_tokens(Origin::signed(0), token_id, H256::zero()));
+        assert_ok!(ERC::collateralize_token(Origin::signed(0), token_id, H256::zero()));
         // owner shouldn't have token
         assert_eq!(ERC::balance_of(0), 0);
         // token shouldn't have owner

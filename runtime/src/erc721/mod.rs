@@ -139,7 +139,7 @@ decl_module! {
         // User can collateralize n token for any reason (referenced by a hash ptr)
         // After that, the token is no longer "owned" by the user
         // Later: assume you can collateralize by a specific token ID
-        pub fn collateralize_tokens(origin, token_id: T::Hash, reason: T::Hash) {
+        pub fn collateralize_token(origin, token_id: T::Hash, reason: T::Hash) {
             // "Locks" token from leaving 
             let sender = ensure_signed(origin)?;
 
@@ -152,7 +152,7 @@ decl_module! {
         // Gives collateralized token to an account
         // Can be debtor, or creditor
         // Only collable by the system
-        pub fn uncollateralize_tokens(to: T::AccountId, token_id: T::Hash, reason: T::Hash) {
+        pub fn uncollateralize_token(to: T::AccountId, token_id: T::Hash, reason: T::Hash) {
 
         }
 
