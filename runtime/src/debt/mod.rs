@@ -30,9 +30,9 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 pub enum Status {
 	Open, 			// looking for issuance
 	Active, 		// loan issued, pending payment
-	Expired,		/// loan never filled, expired
+	Expired,		// loan never filled, expired
 	Repaid, 		// closed, repaid
-	Defaulted,		// unpaid, collat seized
+	Seized,			// unpaid, collat seized
 }
 
 // Status is by default
@@ -44,13 +44,18 @@ impl Default for Status {
 #[derive(Encode, Decode, Default, Clone, PartialEq)] //these are custom traits required by all structs (some traits forenums)
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
 pub struct Debt<AccountId, Balance, Moment, Hash> {   //Needs the blake2 Hash trait
+	status: Status,					// Default is open
 	requestor: AccountId,		// Account that will go in debt
 	beneficiary: AccountId,	// Recipient of Balance
-	amount: Balance,				// Principal loan
-	expiry: Moment,					// Duration of debtRequest
-	status: Status,					// Default is open
+	request_expiry: Moment,	// debt_request 
+	//TODO to refactor out into debt_terms (interval, interest rate, deadline)
+	// principle total, interest total, deadline
+	principal: Balance,			// Principal loan
+	interest_rate: u64,			// % charged on principal, for every interest period
+	interest_period: u64,		// monthly, daily, in seconds
+	term_length: u64, 			// repayment time, in seconds
 	// Filled in after loan is fulfilled by someone
-	collateral: Hash,		// ID of the collateral for this loan
+	collateral: Hash,				// ID of the collateral for this loan
 	creditor: AccountId,  	// null as default
 }
 
@@ -61,7 +66,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as Debt {
 				// TODO later abstrate T::Hash into generic vars, so its not so long?
 		// doesn't get deleted
-		Debts get(get_debt_order): map T::Hash => Debt<T::AccountId, T::Balance, T::Moment>; //DebtRequest ID to the RequestItself
+		Debts get(get_debt): map T::Hash => Debt<T::AccountId, T::Balance, T::Moment, T::Hash>;
 		// [0, 0x...] [1, 0x...]
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
 		DebtCount get(get_total_debts): DebtIndex;  //Alias for u64
@@ -77,9 +82,12 @@ decl_module! {
 
 		pub fn borrow(
 				origin, 
-				amount: T::Balance, 
 				beneficiary: <T::Lookup as StaticLookup>::Source, 
-				expiry: T::Moment
+				request_expiry: T::Moment, 
+				principal: T::Balance,
+				interest_rate: u64,
+				interest_period: u64,
+				term_length: u64
 		) { //TODO, change expiry
 			let requestor = ensure_signed(origin)?;		//macro, returns sender address
 			let now = <timestamp::Module<T>>::get();
@@ -93,21 +101,50 @@ decl_module! {
 			let new_debt = Debt {
 				requestor: requestor.clone(),
 				beneficiary: beneficiary.clone(),
-				amount,
-				expiry
+				request_expiry,
+				principal,
+				interest_rate,
+				interest_period,
+				term_length,
+				..Default::default()
 			};
 
 			// Add new debt request to DebtRequests map
-			let i = Self::get_total_debt_requests();
+			let i = Self::get_total_debts();
 			<DebtCount<T>>::put(i+1); //increment total count by 1
 			<DebtIndexToId<T>>::insert(i, debt_id);
 			<Debts<T>>::insert(debt_id, new_debt);
 			// Emit the event
 
 			Self::deposit_event(RawEvent::DebtCreated(requestor, debt_id));
-			// TODO remove later
 		}
 
+		// Creditor sends money into this function to fulfill loan
+		pub fn fulfill(origin, debt_id: T::Hash) {
+			// TODO
+			// Starts the term
+			// 
+		}
+		
+
+		// user sends money into this fn 
+		// 
+		pub fn repay(origin, debt_id: T::Hash) {
+
+		}
+		// get available debts()
+
+		// Maintain a queue of open debts? or it checks all the debts...
+		// If open > change to expired
+		// If defaulted > change to defaulted
+		fn on_initialize() {
+			// update loan statuses
+		}
+
+		fn on_finalize() {
+
+		}
+		
 		// TODO: check if debt has been collateralized. 
 		// on_initialize
 		// 

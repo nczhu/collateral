@@ -79,10 +79,10 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 fn should_create_debt_request() {
 	with_externalities(&mut new_test_ext(), || {
 		//       uses the Alias
-		assert_ok!(Debt::create_debt_request(Origin::signed(0), 5, 1, 12345));
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
 
 		// Timestamp hasn't incremented, so hash should stay the time
-		assert_noop!(Debt::create_debt_request( Origin::signed(0), 5, 1, 12345),
+		assert_noop!(Debt::borrow( Origin::signed(0), 0, 1, 100, 0, 0, 1),
 		"Error: Debt request already exists");
 	});
 }

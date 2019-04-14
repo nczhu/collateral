@@ -144,7 +144,7 @@ decl_module! {
             let sender = ensure_signed(origin)?;
 
             Self::_put_in_escrow(sender, token_id, reason)?;
-
+            // TODO call a sort of "on_dilution" hook
             // TODO: emit some event here
         }
 
