@@ -74,7 +74,18 @@ type ERC = erc721::Module<Test>;
 // This function basically just builds a genesis storage key/value store according to
 // our desired mockup.
 fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-	system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+	let mut t = system::GenesisConfig::<Test>::default().build_storage().unwrap().0;
+	t.extend(balances::GenesisConfig::<Test>{
+		balances: vec![(0, 100),(1, 100),(2, 100)], //initializes some accts with balances
+		transaction_base_fee: 0,
+		transaction_byte_fee: 0,
+		transfer_fee: 0,
+		creation_fee: 0,
+		existential_deposit: 0,
+		vesting: vec![],
+	}.build_storage().unwrap().0);
+	// last step... what this do?
+	t.into()
 }
 
 // UNIT Tests
@@ -100,18 +111,22 @@ fn should_fulfill_request() {
 		//       uses the Alias
 		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
 		let debt_id = Debt::get_debt_id(0);
-		
+
 		// Debt isn't collateralized yet
 		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_err());
 		
 		// should be able to fulfill debt
 		assert_ok!(ERC::collateralize_token(Origin::signed(0), token_id, debt_id));
 		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_ok());
-		// collateralize
-		// fulfill 
+		assert_eq!(0, Balance::free_balance(&1));
+		assert_eq!(200, Balance::free_balance(&0));
+	
+	
+		// Check debt now has creditor
+
 
 		// should fail if is already issued
-		// fulfill loan
+		// 3rd person cannot fulfill debt... bc creditor exists now.
 		
 	});
 }

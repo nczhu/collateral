@@ -148,11 +148,11 @@ decl_module! {
 			// Transfer the money
 
 			// With the currency trait from balances<module<T>>
-			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal);
-			// debt.creditor = sender;
-			
-			// Add to active loan
-			// Sudo call transfer function...
+			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
+
+			debt.creditor = sender;
+
+			// TODO emit event
 
 		}
 		
