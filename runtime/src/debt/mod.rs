@@ -33,21 +33,21 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 #[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum Status {
-	Open, 			// (in draft, just collateralized, repaying) i.e. not expired, repaid, or seized
+	Active, 			// (in draft, just collateralized, repaying) i.e. not expired, repaid, or seized
 	Repaid, 		// closed, repaid
 	Seized,			// unpaid, collat seized
 }
 
 // Status is by default
 impl Default for Status {
-	fn default() -> Self { Status::Open }
+	fn default() -> Self { Status::Active }
 }
 
 // Asset owners can create a DebtRequest to ask for a traunche of Balance
 #[derive(Encode, Decode, Default, Clone, PartialEq)] //these are custom traits required by all structs (some traits forenums)
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
 pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
-	status: Status,					// Default is open
+	status: Status,					// Default is Active
 	// todo, wrap this in Option<T::AccountId>
 	requestor: AccountId,		// Account that will go in debt
 	beneficiary: AccountId,	// Recipient of Balance
@@ -56,14 +56,15 @@ pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 	// principle total, interest total, deadline
 	principal: Balance,			// Principal loan Q: why Balance inside struct, not balanceof
 	interest_rate: u64,			// % charged on principal, for every interest period
-	interest_period: u64,		// monthly, daily, in seconds
-	term_length: u64, 			// repayment time, in seconds
+	interest_period: Moment,		// monthly, daily, in seconds
+	term_length: Moment, 			// repayment time, in seconds
 	// Filled in after loan is fulfilled by someone
 	creditor: AccountId,  	// null as default
+	term_start: Moment,
 }
 
 type DebtIndex = u64; //like proposalindex in treasury
-type OpenIndex = u64; //like proposalindex in treasury
+type ActiveIndex = u64; //like proposalindex in treasury
 
 /// This module's storage items.
 decl_storage! {
@@ -75,10 +76,10 @@ decl_storage! {
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
 		DebtCount get(get_total_debts): DebtIndex;  //Alias for u64
 
-		// A map of open debts that system must evaluate
+		// A map of Active debts that system must evaluate
 		// TODO rename to active: ...
-		OpenDebts get(get_open_debt): map OpenIndex => T::Hash;
-		OpenDebtsCount get(get_total_open_debts): OpenIndex; 
+		ActiveDebts get(get_active_debt): map ActiveIndex => T::Hash;
+		ActiveDebtsCount get(get_total_active_debts): ActiveIndex; 
 	}
 }
 
@@ -91,44 +92,45 @@ decl_module! {
 
 		pub fn borrow(
 				origin, 
-				beneficiary: <T::Lookup as StaticLookup>::Source, 
+				beneficiary: T::AccountId, 
 				request_expiry: T::Moment, 
 				principal: BalanceOf<T>, //make compact?
 				interest_rate: u64,
-				interest_period: u64,
-				term_length: u64
+				interest_period: T::Moment,
+				term_length: T::Moment
 		) { //TODO, change expiry
 			let requestor = ensure_signed(origin)?;		//macro, returns sender address
 			let now = <timestamp::Module<T>>::get();
 
 			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
 			let debt_id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash); // use runtime_primitives::hash, its a constnat!
-			let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
-
-			// TODO make sure debtrequest doesn't exist already, in case they try to overwrite debt..
+			// let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
+	
 			ensure!(!<Debts<T>>::exists(debt_id), "Error: Debt request already exists");
-			let new_debt = Debt {
-				requestor: requestor.clone(),
-				beneficiary,
-				request_expiry,
-				principal,
-				interest_rate,
-				interest_period,
-				term_length,
-				..Default::default()
-			};
-
+			
 			// Add new debt request to DebtRequests map
 			let i = Self::get_total_debts();
 			<DebtCount<T>>::put(i+1); //increment total count by 1
+
 			<DebtIndexToId<T>>::insert(i, debt_id);
-			<Debts<T>>::insert(debt_id, new_debt);
+
+			<Debts<T>>::insert(debt_id, Debt {
+													requestor: requestor.clone(),
+													beneficiary,
+													request_expiry,
+													principal,
+													interest_rate,
+													interest_period,
+													term_length,
+													..Default::default() //suspected culprit
+												}
+			);
 			// Emit the event
 
 			Self::deposit_event(RawEvent::DebtCreated(requestor, debt_id));
 		}
 
-		// helper fn: get open & collateralized loans...
+		// helper fn: get Active & collateralized loans...
 
 		// Creditor sends money into this function to fulfill loan
 		pub fn fulfill(origin, debt_id: T::Hash) {
@@ -138,49 +140,79 @@ decl_module! {
 
 			let now = <timestamp::Module<T>>::get();
 			ensure!(debt.request_expiry >= now, "This debt request has expired");
-			ensure!(debt.status == Status::Open, "This debt request is no longer available");
+			ensure!(debt.status == Status::Active, "This debt request is no longer available");
 			ensure!(debt.creditor == <T as system::Trait>::AccountId::default(), "This debt request is fulfilled");
 			
 			let collateral = <erc721::Module<T>>::get_escrow(debt_id);
 			ensure!(collateral != <T as system::Trait>::Hash::default(), "This debt is not collateralized");
 			
-			// Check sender has enough balance
-			// Transfer the money
-
 			// With the currency trait from balances<module<T>>
 			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
 
+			
 			debt.creditor = sender;
-
+			
+			debt.term_start = now;
+			// write to the state...
+			<Debts<T>>::insert(debt_id, debt);
+			
 			// TODO emit event
-
 		}
 		
 
-		// user sends money into this fn 
-		// 
-		pub fn repay(origin, debt_id: T::Hash) {
-				// changes status from active to repaid
+		// Debtor pays back "value" 
+		// right now, has to be entire value... 
+		pub fn repay(origin, debt_id: T::Hash, value: BalanceOf<T>) {
+			let sender = ensure_signed(origin)?;
+			let now = <timestamp::Module<T>>::get();
+			
+			ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
+			let mut debt = <Debts<T>>::get(debt_id);
+			ensure!(debt.status == Status::Active, "This debt is no longer active");
+			
+			// TODO figure out safer way to add Moments 
+			let term_end = debt.term_start.clone() + debt.term_length.clone();
+			ensure!(now <= term_end, "This debt is past due");
+
+			// TODO: later enable multiple repayments
+			ensure!(value >= debt.principal, "You have to repay the debt in full");
+
+			
+			T::Currency::transfer(&sender, &debt.creditor, value)?;
+
+			// return collateral
+			<erc721::Module<T>>::uncollateralize_token(debt.requestor.clone(), debt_id)?;
+			// mark as completed
+
+			// TODO check if repaid
+			debt.status = Status::Repaid;
+
+			<Debts<T>>::insert(debt_id, debt);
+			// TODO update to non, remove from open queue
+
+			// TODO: emit an event
 
 		}
 
-		// Checks for passive situations
-		// collateralized & never funded -> returns collateral
-		// past payback date -> seizes collateral
+		// Checks for time based, passive situations
+		
+		// collateralized & request expired -> returns collateral
+		// loan-defaulted, never paid -> seize collateral
 		fn on_initialize() {
-
-			// Check if open/collateralized && expired => EXPIRED
+			// Check if Active/collateralized && expired => EXPIRED, remove
 			
-			// Check if open & collateralized => Open, add available for debter
+			// Check if Active & collateralized => Active, add available for debter
 				// => 
 
 			// if active & repay date passed  => seized
 			// if active & repaid 						=> repaid
-			// if active & ddaste has passd => inactive 
+			// if active & ddaste has passd => inactive
+
+			// TODO: Accrue interest...
 		}
 
 		fn on_finalize() {
-			// TODO: clean up expired, clean debt requests
+			// TODO: clean up unfulfilled debt requests that don't need to be onchain
 			// default/repaid should forever remain on chain... 
 
 		}
