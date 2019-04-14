@@ -31,6 +31,12 @@ pub trait Trait: balances::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
+// impl<T: Trait> Token for Module<T> {
+//     fn get_collateral(id: T::Hash) -> T::Hash {
+//         <Escrow>::get(id);
+//     }
+// }
+
 decl_event!(
     pub enum Event<T>
     where
@@ -60,8 +66,8 @@ decl_storage! {
         OwnedTokensIndex: map T::Hash => u64;
         // Start ERC721 : Enumerable : Storage & Getters //
 
-        // @nczhu: Mapping of a token_id to whats its collateralized for
-        Escrow get(is_escrowed): map T::Hash => T::Hash;
+        // @nczhu: Mapping of reason to token_id collateralized for it
+        Escrow get(get_escrow): map T::Hash => T::Hash;
         // TODO, make escrows enumerable? or associated with teh people?
         
         // Not a part of the ERC721 specification, but used in random token generation
@@ -144,6 +150,8 @@ decl_module! {
             let sender = ensure_signed(origin)?;
 
             Self::_put_in_escrow(sender, token_id, reason)?;
+
+            // TODO: invoke the trait?
             // TODO call a sort of "on_dilution" hook
             // TODO: emit some event here
         }
@@ -182,7 +190,7 @@ impl<T: Trait> Module<T> {
         <TokenOwner<T>>::remove(token_id);
 
         //Add to escrow
-        <Escrow<T>>::insert(token_id, reason);
+        <Escrow<T>>::insert(reason, token_id);
 
 
         Ok(())

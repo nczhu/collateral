@@ -67,6 +67,7 @@ impl Trait for Test {
 type Debt = Module<Test>;
 type Balance = balances::Module<Test>;
 type Timestamp = timestamp::Module<Test>;
+type ERC = erc721::Module<Test>;
 
 // This function basically just builds a genesis storage key/value store according to
 // our desired mockup.
@@ -87,6 +88,31 @@ fn should_create_debt_request() {
 	});
 }
 
+#[test]
+fn should_fulfill_request() {
+	with_externalities(&mut new_test_ext(), || {
+		// set up
+		ERC::create_token(Origin::signed(0));
+    let token_id = ERC::token_by_index(0);
+
+		//       uses the Alias
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
+		let debt_id = Debt::get_debt_id(0);
+		
+		// Debt isn't collateralized yet
+		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_err());
+		
+		// should be able to fulfill debt
+		assert_ok!(ERC::collateralize_token(Origin::signed(0), token_id, debt_id));
+		assert!(Debt::fulfill(Origin::signed(1), debt_id).is_ok());
+		// collateralize
+		// fulfill 
+
+		// should fail if is already issued
+		// fulfill loan
+		
+	});
+}
 // #[test]
 // fn should_collateralize() {
 // 	with_externalities(&mut new_test_ext(), || { 

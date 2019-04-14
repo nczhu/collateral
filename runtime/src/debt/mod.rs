@@ -13,6 +13,7 @@ use system::ensure_signed;
 use super::erc721;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
 use runtime_primitives::traits::{Hash, StaticLookup}; // Zero, As //static look up is for beneficiary address
+use primitives::H256;
 
 #[cfg(test)]
 mod test;
@@ -28,9 +29,7 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 #[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum Status {
-	Open, 			// looking for issuance
-	Active, 		// loan issued, pending payment
-	Expired,		// loan never filled, expired
+	Open, 			// (in draft, just collateralized, repaying) i.e. not expired, repaid, or seized
 	Repaid, 		// closed, repaid
 	Seized,			// unpaid, collat seized
 }
@@ -43,7 +42,7 @@ impl Default for Status {
 // Asset owners can create a DebtRequest to ask for a traunche of Balance
 #[derive(Encode, Decode, Default, Clone, PartialEq)] //these are custom traits required by all structs (some traits forenums)
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
-pub struct Debt<AccountId, Balance, Moment, Hash> {   //Needs the blake2 Hash trait
+pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 	status: Status,					// Default is open
 	requestor: AccountId,		// Account that will go in debt
 	beneficiary: AccountId,	// Recipient of Balance
@@ -55,21 +54,26 @@ pub struct Debt<AccountId, Balance, Moment, Hash> {   //Needs the blake2 Hash tr
 	interest_period: u64,		// monthly, daily, in seconds
 	term_length: u64, 			// repayment time, in seconds
 	// Filled in after loan is fulfilled by someone
-	collateral: Hash,				// ID of the collateral for this loan
 	creditor: AccountId,  	// null as default
 }
 
 type DebtIndex = u64; //like proposalindex in treasury
+type OpenIndex = u64; //like proposalindex in treasury
 
 /// This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as Debt {
 				// TODO later abstrate T::Hash into generic vars, so its not so long?
 		// doesn't get deleted
-		Debts get(get_debt): map T::Hash => Debt<T::AccountId, T::Balance, T::Moment, T::Hash>;
+		Debts get(get_debt): map T::Hash => Debt<T::AccountId, T::Balance, T::Moment>;
 		// [0, 0x...] [1, 0x...]
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
 		DebtCount get(get_total_debts): DebtIndex;  //Alias for u64
+
+		// A map of open debts that system must evaluate
+		// TODO rename to active: ...
+		OpenDebts get(get_open_debt): map OpenIndex => T::Hash;
+		OpenDebtsCount get(get_total_open_debts): OpenIndex; 
 	}
 }
 
@@ -119,35 +123,66 @@ decl_module! {
 			Self::deposit_event(RawEvent::DebtCreated(requestor, debt_id));
 		}
 
+		// helper fn: get open & collateralized loans...
+
 		// Creditor sends money into this function to fulfill loan
 		pub fn fulfill(origin, debt_id: T::Hash) {
-			// TODO
-			// Starts the term
-			// 
+			let sender = ensure_signed(origin)?;
+			ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
+			let mut debt = <Debts<T>>::get(debt_id);
+
+			let now = <timestamp::Module<T>>::get();
+			ensure!(debt.request_expiry >= now, "This debt request has expired");
+			println!("====== 1 =====");
+			ensure!(debt.status == Status::Open, "This debt request is no longer available");
+			// ensure this field is invalid... not creditor yet...
+			println!("====== 2 =====");
+			ensure!(debt.creditor == <T as system::Trait>::AccountId::default(), "This debt request is fulfilled");
+			// // Assume that people will listen for "collateralize events, and they'll just know"
+			println!("====== 3 =====");
+			let collateral = <erc721::Module<T>>::get_escrow(debt_id);
+			// // ensure that its not the default debt_id hash?
+			println!("====== 4 =====");
+			// check that collateral isn't the default
+			ensure!(collateral != <T as system::Trait>::Hash::default(), "This debt is not collateralized");
+			
+			// Check sender has enough balance
+			// Transfer the money
+			// set creditor 
+
+			// Change status, ...
+			// Add to active loan
 		}
 		
 
 		// user sends money into this fn 
 		// 
 		pub fn repay(origin, debt_id: T::Hash) {
+				// changes status from active to repaid
 
 		}
-		// get available debts()
 
-		// Maintain a queue of open debts? or it checks all the debts...
-		// If open > change to expired
-		// If defaulted > change to defaulted
+		// Checks for passive situations
+		// collateralized & never funded -> returns collateral
+		// past payback date -> seizes collateral
 		fn on_initialize() {
-			// update loan statuses
+
+			// Check if open/collateralized && expired => EXPIRED
+			
+			// Check if open & collateralized => Open, add available for debter
+				// => 
+
+			// if active & repay date passed  => seized
+			// if active & repaid 						=> repaid
+			// if active & ddaste has passd => inactive 
 		}
 
 		fn on_finalize() {
+			// TODO: clean up expired, clean debt requests
+			// default/repaid should forever remain on chain... 
 
 		}
 		
-		// TODO: check if debt has been collateralized. 
-		// on_initialize
-		// 
 	}
 }
 
