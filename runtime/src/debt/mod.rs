@@ -11,6 +11,7 @@
 use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, dispatch::Result, ensure};
 use system::ensure_signed;
 use super::erc721;
+use rstd::cmp;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
 use runtime_primitives::traits::{Hash, Zero, As, CheckedAdd, CheckedSub, CheckedMul}; // StaticLookup, As //static look up is for beneficiary address
 
@@ -98,6 +99,9 @@ decl_module! {
 			<DebtCount<T>>::put(i+1); //increment total count by 1
 
 			<DebtIndexToId<T>>::insert(i, debt_id);
+			// TODO interest period must have value
+			// interest period must have value
+			// term length must be longter than interest period
 
 			<Debts<T>>::insert(debt_id, Debt {
 													requestor: requestor.clone(),
@@ -142,15 +146,12 @@ decl_module! {
 			Self::deposit_event(RawEvent::DebtFulfilled(sender, debt_id));
 		}
 
-		// TODO remove this fn
-		pub fn update_balance(debt_id: T::Hash) {
-			Self::_update_balance(debt_id);
-		}
 		// Debtor pays back "value" 
 		// right now, has to be entire value... 
 		pub fn repay(origin, debt_id: T::Hash, value: BalanceOf<T>) {
 
-			// todo: call update balance
+			// updates interest to the newest sum
+			Self::update_balance(debt_id);
 
 			let sender = ensure_signed(origin)?;
 			let now = <timestamp::Module<T>>::get();
@@ -162,12 +163,23 @@ decl_module! {
 			
 			let term_end = debt.term_start.clone() + debt.term_length.clone(); // TODO figure out safer way to add Moments 
 			ensure!(now <= term_end, "This debt is past due");
-			ensure!(value >= debt.principal, "You have to repay the debt in full");
-
+		
 			// TODO grab the min btw value, and whats owed
 			T::Currency::transfer(&sender, &debt.creditor, value)?;
-			debt.principal = debt.principal.checked_sub(&value)
-				.ok_or("Underflow substracting debt")?;
+			
+			// 1. pay off interest
+			let interest_payment = cmp::min(debt.interest, value);
+			// TODO check if this is redundant, since checked_sub substracts in place
+			debt.interest = debt.interest.checked_sub(&interest_payment)
+				.ok_or("Underflow substracting interest payment")?;
+
+			// 2. if remainder, pay off principal
+			if value > interest_payment {
+				let principal_payment = value.checked_sub(&interest_payment)
+					.ok_or("Underflow substracting principal payment")?;
+				debt.principal = debt.principal.checked_sub(&principal_payment)
+					.ok_or("Underflow substracting from principal")?;				
+			}
 
 			<Debts<T>>::insert(debt_id, debt.clone());
 
@@ -203,12 +215,11 @@ decl_module! {
 
 impl <T: Trait> Module<T> {
 																	// balance or currency?
-	fn _update_balance(debt_id: T::Hash) -> Result {
+	pub fn update_balance(debt_id: T::Hash) -> Result {
 		let now = <timestamp::Module<T>>::get();
 		
 		// check for activity, not expired, end of term.
 		ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
-		// TODO check debt hasn't expired or defaulted?
 
 		let mut debt = <Debts<T>>::get(debt_id);
 
