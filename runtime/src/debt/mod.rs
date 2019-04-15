@@ -24,8 +24,6 @@ mod test;
 
 /// The module's configuration trait.
 pub trait Trait: timestamp::Trait + erc721::Trait {
-	// TODO: Add other types and constants required configure this module.
-
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type Currency: Currency<Self::AccountId>;
@@ -58,22 +56,16 @@ type ActiveIndex = u64; //like proposalindex in treasury
 
 /// This module's storage items.
 decl_storage! {
-	trait Store for Module<T: Trait> as Debt {
-		// TODO later abstrate T::Hash into generic vars, so its not so long?
-		
-		// Queue of active debts. inactive debts are cleared. TODO: track the statuses, credit history
+	trait Store for Module<T: Trait> as Debt {		
 		Debts get(get_debt): map T::Hash => Debt<T::AccountId, BalanceOf<T>, T::Moment>;
-		// [0, 0x...] [1, 0x...]
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
-		DebtCount get(get_total_debts): DebtIndex;  //Alias for u64
+		DebtCount get(get_total_debts): DebtIndex;
 	}
 }
 
 decl_module! {
 	/// The module declaration.
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-		// Initializing events
-		// this is needed only if you are using events in your module
 		fn deposit_event<T>() = default;
 
 		pub fn borrow(
@@ -88,20 +80,20 @@ decl_module! {
 			let requestor = ensure_signed(origin)?;		//macro, returns sender address
 			let now = <timestamp::Module<T>>::get();
 
-			// Q: whats the diff btw this and just doing <t as system:: trait> .. etc.
 			let debt_id = (<system::Module<T>>::random_seed(), &requestor, now).using_encoded(<T as system::Trait>::Hashing::hash); // use runtime_primitives::hash, its a constnat!
 			// let beneficiary = T::Lookup::lookup(beneficiary)?;		//looks up the accountId.
 	
 			ensure!(!<Debts<T>>::exists(debt_id), "Error: Debt request already exists");
-			
+			ensure!(! interest_period.is_zero(), "Error: interest period cannot be zero");
+			ensure!(! term_length.is_zero(), "Error: term length cannot be zero");
+			ensure!( term_length > interest_period, "Error: interest period cannot be longer than term length");
+
 			// Add new debt request to DebtRequests map
 			let i = Self::get_total_debts();
 			<DebtCount<T>>::put(i+1); //increment total count by 1
 
 			<DebtIndexToId<T>>::insert(i, debt_id);
-			// TODO interest period must have value
-			// interest period must have value
-			// term length must be longter than interest period
+			
 
 			<Debts<T>>::insert(debt_id, Debt {
 													requestor: requestor.clone(),
@@ -118,8 +110,6 @@ decl_module! {
 			Self::deposit_event(RawEvent::DebtBorrowed(requestor, debt_id));
 		}
 
-		// helper fn: get Active & collateralized loans...
-
 		// Creditor sends money into this function to fulfill loan
 		pub fn fulfill(origin, debt_id: T::Hash) {
 			let sender = ensure_signed(origin)?;
@@ -128,30 +118,21 @@ decl_module! {
 
 			let now = <timestamp::Module<T>>::get();
 			ensure!(debt.request_expiry >= now, "This debt request has expired");
-			// ensure!(debt.status == Status::Active, "This debt request is no longer available");
 			ensure!(debt.creditor == <T as system::Trait>::AccountId::default(), "This debt request is fulfilled");
 			
 			let collateral = <erc721::Module<T>>::get_escrow(debt_id);
 			ensure!(collateral != <T as system::Trait>::Hash::default(), "This debt is not collateralized");
 			
-			// With the currency trait from balances<module<T>>
 			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
 			debt.creditor = sender.clone();
 			debt.term_start = now;
-			// debt.last_payment = now; //todo: fix this?
-			// write to the state...
 			<Debts<T>>::insert(debt_id, debt);
 			
-			// TODO emit event
 			Self::deposit_event(RawEvent::DebtFulfilled(sender, debt_id));
 		}
 
-		// Debtor pays back "value" 
-		// right now, has to be entire value... 
 		pub fn repay(origin, debt_id: T::Hash, value: BalanceOf<T>) {
-
-			// updates interest to the newest sum
-			Self::update_balance(debt_id);
+			Self::update_balance(debt_id); // calculates interest
 
 			let sender = ensure_signed(origin)?;
 			let now = <timestamp::Module<T>>::get();
@@ -184,7 +165,9 @@ decl_module! {
 			<Debts<T>>::insert(debt_id, debt.clone());
 
 			// TODO: If debt is fully repaid
-			<erc721::Module<T>>::uncollateralize_token(debt.requestor, debt_id)?;
+			if debt.principal.is_zero() && debt.interest.is_zero() {
+				<erc721::Module<T>>::uncollateralize_token(debt.requestor, debt_id)?;	
+			}
 
 			Self::deposit_event(RawEvent::DebtRepaid(sender, debt_id));
 		}
@@ -204,12 +187,9 @@ decl_module! {
 			ensure!(! debt.principal.is_zero(), "This debt has been paid off");
 			
 			<erc721::Module<T>>::uncollateralize_token(debt.creditor, debt_id)?;
-			// Later: if not the creditor, give account a small "hunting" fee
 
 			Self::deposit_event(RawEvent::DebtSeized(sender, debt_id));
 		}
-
-		// Later: incentivise people to hunt for defaulted
 	}
 }
 
@@ -226,28 +206,19 @@ impl <T: Trait> Module<T> {
 		// time passed since last calculated interest
 												// todo: check if n_periods is 0/nil?
 		let time_passed = now - (T::Moment::sa(debt.n_periods) * debt.interest_period.clone()); //TODO safer math
-		println!("Seconds passed since last calc {:?}", time_passed);
 
 		// additional periods to calculate interest for
 		let n:u64 = (time_passed / debt.interest_period.clone()).as_();
-		println!("Periods passed since last calc {:?}", n);
 
 		// convert to just u64
 		let principal:u64 = debt.principal.as_();
 		let prev_interest:u64 = debt.interest.as_();
 		let prev_balance:u64 = principal + prev_interest;
-
-		println!("Prev balance {:?}", prev_balance);
 		
 		// simple interest calculation: balance = (prev_balance)(1 + interest) ^ periods passed
 		let i:f64 = f64::from(debt.interest_rate) / 100.0 + 1.0;
 		let x = i.powi(n as i32);
-		println!("===={:?} * {:?}", prev_balance , x);
-
-
 		let new_balance = ((prev_balance as f64) * x ) as u64;
-		println!("New balance: {:?}", new_balance);
-		
 		let new_interest = new_balance - principal;
 
 		debt.interest = <BalanceOf<T> as As<u64>>::sa(new_interest as u64); //todo get rid of extraneous things

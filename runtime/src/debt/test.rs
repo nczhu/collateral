@@ -92,20 +92,18 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 
 // UNIT Tests
 #[test]
-#[ignore]
 fn should_create_debt_request() {
 	with_externalities(&mut new_test_ext(), || {
 		//       uses the Alias
-		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 1, 1, 2));
 
 		// Timestamp hasn't incremented, so hash should stay the time
-		assert_noop!(Debt::borrow( Origin::signed(0), 0, 1, 100, 0, 0, 1),
+		assert_noop!(Debt::borrow( Origin::signed(0), 0, 1, 100, 1, 1, 2),
 		"Error: Debt request already exists");
 	});
 }
 
 #[test]
-#[ignore]
 fn should_fulfill_request() {
 	with_externalities(&mut new_test_ext(), || {
 		// set up
@@ -132,7 +130,6 @@ fn should_fulfill_request() {
 }
 
 #[test]
-#[ignore]
 fn can_repay() {
     with_externalities(&mut new_test_ext(), || {
     	// SETUP... is there a way to refactor this
@@ -173,7 +170,6 @@ fn repay_interest_first() {
 }
 
 #[test]
-#[ignore]
 fn can_seize() {
 		with_externalities(&mut new_test_ext(), || {
   		ERC::create_token(Origin::signed(1));
@@ -190,7 +186,6 @@ fn can_seize() {
 }
 
 #[test]
-#[ignore]
 fn can_compound_interest() {
 	with_externalities(&mut new_test_ext(), || {
   		ERC::create_token(Origin::signed(1));
@@ -226,26 +221,3 @@ fn can_compound_interest() {
 			assert_eq!(Debt::get_debt(debt_id).interest, 61);
   	});
 }
-
-// #[test]
-// fn can_pay_interest() {
-// 	with_externalities(&mut new_test_ext(), || {
-//   		ERC::create_token(Origin::signed(1));
-//     	let token_id = ERC::token_by_index(0);
-
-//     	// 10% interest per period
-//     	// 10: interest period, every 10 seconds interest is compounded
-//     	// 500 seconds before collat is seized
-// 			Debt::borrow(Origin::signed(1), 1, 1, 100, 0.10, 10, 500); //term length is 
-// 			let debt_id = Debt::get_debt_id(0);
-// 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
-// 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
-
-
-//    		// should accurately calculate dues
-//    		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
-//    		Timestamp::set_timestamp(6);
-//    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
-
-//   });
-// }
