@@ -132,7 +132,7 @@ fn should_fulfill_request() {
 }
 
 #[test]
-// #[ignore]
+#[ignore]
 fn can_repay() {
     with_externalities(&mut new_test_ext(), || {
     	// SETUP... is there a way to refactor this
@@ -148,8 +148,28 @@ fn can_repay() {
     });
 }
 
+#[test]
 fn repay_interest_first() {
+		with_externalities(&mut new_test_ext(), || {
+    	ERC::create_token(Origin::signed(1));
+    	let token_id = ERC::token_by_index(0);
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 10, 1, 3); //100 loan, 10%, 1 period
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
+			// repay should clear debt, return collateral
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 0));
+			assert_eq!(Debt::get_debt(debt_id).principal, 100);
 
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 10)); // repaying before interest accrual
+			assert_eq!(Debt::get_debt(debt_id).principal, 90);
+			assert_eq!(Debt::get_debt(debt_id).interest, 0);
+
+			Timestamp::set_timestamp(2); //21 in interest
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 10));
+			assert_eq!(Debt::get_debt(debt_id).principal, 90);
+			assert_eq!(Debt::get_debt(debt_id).interest, 8);
+    });
 }
 
 #[test]
