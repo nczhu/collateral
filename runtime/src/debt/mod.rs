@@ -49,7 +49,7 @@ pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 	interest: Balance,				// interest remaining
 	interest_rate: u32,				// % charged on principal, 10 for 10 percent
 	interest_period: Moment,		// monthly, daily, in seconds
-	n_periods: Moment, 					// n periods of interest already calculated in interest
+	n_periods: u64, 					// n periods of interest already calculated in interest
 }
 
 type DebtIndex = u64; //like proposalindex in treasury
@@ -215,34 +215,33 @@ impl <T: Trait> Module<T> {
 
 		// time passed since last calculated interest
 												// todo: check if n_periods is 0/nil?
-		let time_passed = now - (debt.n_periods * debt.interest_period.clone()); //TODO safer math
+		let time_passed = now - (T::Moment::sa(debt.n_periods) * debt.interest_period.clone()); //TODO safer math
 		println!("Seconds passed since last calc {:?}", time_passed);
 
 		// additional periods to calculate interest for
-		let n:u64 = (time_passed / debt.interest_period).as_();			//convert this into u32 somehow
+		let n:u64 = (time_passed / debt.interest_period.clone()).as_();
 		println!("Periods passed since last calc {:?}", n);
 
 		// convert to just u64
-		let prev_balance = debt.principal + debt.interest;
+		let principal:u64 = debt.principal.as_();
+		let prev_interest:u64 = debt.interest.as_();
+		let prev_balance:u64 = principal + prev_interest;
+
 		println!("Prev balance {:?}", prev_balance);
 		
 		// simple interest calculation: balance = (prev_balance)(1 + interest) ^ periods passed
 		let i:f64 = f64::from(debt.interest_rate) / 100.0 + 1.0;
 		let x = i.powi(n as i32) as u64;
 
-						
-		let new_balance = prev_balance + <BalanceOf<T> as As<u64>>::sa(x as u64);
-		// println!("New balance:{:?}", new_balance);
+		let new_balance = prev_balance * x;
+		println!("New balance: {:?}", new_balance);
+		
+		let new_interest = new_balance - principal;
 
-		// let new_balance = prev_balance.checked_add(&y);
-		// let new_balance = prev_balance * y;
-		// let x = (100 + debt.interest_rate).pow(3) ;
+		debt.interest = <BalanceOf<T> as As<u64>>::sa(new_interest as u64); //todo get rid of extraneous things
+		debt.n_periods = debt.n_periods + n;
 
-		// convert into T::balance
-
-		// debt.n_periods = debt.n_periods + n; // add new periods compounded
-		// debt.interest = new_balance - debt.principal; // update interest with the new compounded interest
-		// <Debts<T>>::insert(debt_id, debt.clone());
+		<Debts<T>>::insert(debt_id, debt.clone());
 
 		Ok(())
 	}
