@@ -84,8 +84,10 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 		existential_deposit: 0,
 		vesting: vec![],
 	}.build_storage().unwrap().0);
-	// last step... what this do?
-	t.into()
+	t.extend(timestamp::GenesisConfig::<Test>{
+		minimum_period: 5,
+	}.build_storage().unwrap().0);
+	t.into() // what does this do?
 }
 
 // UNIT Tests
@@ -111,7 +113,7 @@ fn should_fulfill_request() {
     let token_id = ERC::token_by_index(0);
 
 		//       uses the Alias
-		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 0, 0, 1));
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 5, 1, 3));
 		let debt_id = Debt::get_debt_id(0);
 
 		// Debt isn't collateralized yet
@@ -130,24 +132,120 @@ fn should_fulfill_request() {
 }
 
 #[test]
+#[ignore]
 fn can_repay() {
     with_externalities(&mut new_test_ext(), || {
-
     	// SETUP... is there a way to refactor this
     	ERC::create_token(Origin::signed(1));
     	let token_id = ERC::token_by_index(0);
-			Debt::borrow(Origin::signed(1), 1, 1, 100, 0, 0, 1);
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 5, 1, 3);
 			let debt_id = Debt::get_debt_id(0);
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
-			
 			// repay should clear debt, return collateral
 			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 100));
 			assert_eq!(100, Balance::free_balance(&2));
     });
 }
 
+#[test]
+fn repay_interest_first() {
+		with_externalities(&mut new_test_ext(), || {
+    	ERC::create_token(Origin::signed(1));
+    	let token_id = ERC::token_by_index(0);
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 10, 1, 3); //100 loan, 10%, 1 period
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
+			// repay should clear debt, return collateral
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 0));
+			assert_eq!(Debt::get_debt(debt_id).principal, 100);
+
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 10)); // repaying before interest accrual
+			assert_eq!(Debt::get_debt(debt_id).principal, 90);
+			assert_eq!(Debt::get_debt(debt_id).interest, 0);
+
+			Timestamp::set_timestamp(2); //21 in interest
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 10));
+			assert_eq!(Debt::get_debt(debt_id).principal, 90);
+			assert_eq!(Debt::get_debt(debt_id).interest, 8);
+    });
+}
+
+#[test]
+#[ignore]
+fn can_seize() {
+		with_externalities(&mut new_test_ext(), || {
+  		ERC::create_token(Origin::signed(1));
+    	let token_id = ERC::token_by_index(0);
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 5, 1, 3); //term length is 3, int period is 1
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
+   	// should accurately increment time and update debts
+   		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
+   		Timestamp::set_timestamp(6);
+   		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
+  	});
+}
+
+#[test]
+#[ignore]
+fn can_compound_interest() {
+	with_externalities(&mut new_test_ext(), || {
+  		ERC::create_token(Origin::signed(1));
+    	let token_id = ERC::token_by_index(0);
+
+    	// 10% interest per period
+    	// 10: interest period, every 10 seconds interest is compounded
+    	// 500 seconds before collat is seized
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 10, 10, 500); //term length is 
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
+
+			// balance should be 100, interest should be 0
+			Timestamp::set_timestamp(6);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).principal, 100);
+			assert_eq!(Debt::get_debt(debt_id).interest, 0);
+			
+			// balance should be 110, interest should be 10
+			Timestamp::set_timestamp(10);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).interest, 10);
+   		
+   		// balance should be 121, interest should be 21
+			Timestamp::set_timestamp(21);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).interest, 21);
+			
+
+			Timestamp::set_timestamp(59);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).interest, 61);
+  	});
+}
+
+// #[test]
+// fn can_pay_interest() {
+// 	with_externalities(&mut new_test_ext(), || {
+//   		ERC::create_token(Origin::signed(1));
+//     	let token_id = ERC::token_by_index(0);
+
+//     	// 10% interest per period
+//     	// 10: interest period, every 10 seconds interest is compounded
+//     	// 500 seconds before collat is seized
+// 			Debt::borrow(Origin::signed(1), 1, 1, 100, 0.10, 10, 500); //term length is 
+// 			let debt_id = Debt::get_debt_id(0);
+// 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+// 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
 
 
+//    		// should accurately calculate dues
+//    		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
+//    		Timestamp::set_timestamp(6);
+//    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
 
-
+//   });
+// }
