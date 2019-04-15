@@ -175,7 +175,6 @@ decl_module! {
 			<erc721::Module<T>>::uncollateralize_token(debt.requestor, debt_id)?;
 
 			Self::deposit_event(RawEvent::DebtRepaid(sender, debt_id));
-
 		}
 
 		// The tracking of debt defaults, etc is on the debtor
@@ -231,9 +230,11 @@ impl <T: Trait> Module<T> {
 		
 		// simple interest calculation: balance = (prev_balance)(1 + interest) ^ periods passed
 		let i:f64 = f64::from(debt.interest_rate) / 100.0 + 1.0;
-		let x = i.powi(n as i32) as u64;
+		let x = i.powi(n as i32);
+		println!("===={:?} * {:?}", prev_balance , x);
 
-		let new_balance = prev_balance * x;
+
+		let new_balance = ((prev_balance as f64) * x ) as u64;
 		println!("New balance: {:?}", new_balance);
 		
 		let new_interest = new_balance - principal;

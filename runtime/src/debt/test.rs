@@ -182,13 +182,21 @@ fn can_compound_interest() {
 			assert!(Debt::update_balance(debt_id).is_ok());
 			assert_eq!(Debt::get_debt(debt_id).principal, 100);
 			assert_eq!(Debt::get_debt(debt_id).interest, 0);
+			
 			// balance should be 110, interest should be 10
 			Timestamp::set_timestamp(10);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).interest, 10);
    		
    		// balance should be 121, interest should be 21
 			Timestamp::set_timestamp(20);
-   		
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).interest, 21);
+			
 
+			Timestamp::set_timestamp(50);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).interest, 61);
   	});
 }
 
@@ -212,5 +220,5 @@ fn can_compound_interest() {
 //    		Timestamp::set_timestamp(6);
 //    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
 
-//   	});
+//   });
 // }
