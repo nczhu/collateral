@@ -30,19 +30,7 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 	type Currency: Currency<Self::AccountId>;
 }
 
-// #[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
-// #[cfg_attr(feature = "std", derive(Debug))]
-// pub enum Status {
-// 	Active, 			// (in draft, just collateralized, repaying) i.e. not expired, repaid, or seized
-// 	Repaid, 		// closed, repaid
-// 	Seized,			// unpaid, collat seized
-// }
-
-// Status is by default
-// impl Default for Status {
-// 	fn default() -> Self { Status::Active }
-// }
-
+// TODO refactor out the interest calculation parts
 // Asset owners can create a DebtRequest to ask for a traunche of Balance
 #[derive(Encode, Decode, Default, Clone, PartialEq)] //these are custom traits required by all structs (some traits forenums)
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
@@ -53,8 +41,11 @@ pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 	beneficiary: AccountId,	// Recipient of Balance
 	request_expiry: Moment,	// debt_request 
 	//TODO to refactor out into debt_terms (interval, interest rate, deadline)
-	// principle total, interest total, deadline
-	principal: Balance,			// Starting principal loan; Q: why Balance inside struct, not balanceof
+	
+	// remaining balances
+	principal: Balance,			// principal remaining; Q: why Balance inside struct, not balanceof
+	interest: Balance,			// interest remaining
+	last_payment: Moment, 		// timestamp of last payment
 	interest_rate: u64,			// % charged on principal, for every interest period
 	interest_period: Moment,		// monthly, daily, in seconds
 	term_length: Moment, 			// repayment time, in seconds
@@ -94,7 +85,7 @@ decl_module! {
 		pub fn borrow(
 				origin, 
 				beneficiary: T::AccountId, 
-				request_expiry: T::Moment, 
+				request_expiry: T::Moment,
 				principal: BalanceOf<T>, //make compact?
 				interest_rate: u64,
 				interest_period: T::Moment,
@@ -126,15 +117,8 @@ decl_module! {
 													..Default::default() //suspected culprit
 												}
 			);
-			// Emit the event
 
-			// add to active debts, system reads through this
-			// let j = <ActiveDebtsCount<T>>::get();
-			// <ActiveDebts<T>>::insert(j, debt_id);
-			// <ActiveDebtsCount<T>>::mutate(|n| *n += 1);
-
-
-			Self::deposit_event(RawEvent::DebtCreated(requestor, debt_id));
+			Self::deposit_event(RawEvent::DebtBorrowed(requestor, debt_id));
 		}
 
 		// helper fn: get Active & collateralized loans...
@@ -155,16 +139,14 @@ decl_module! {
 			
 			// With the currency trait from balances<module<T>>
 			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
-			debt.creditor = sender;
+			debt.creditor = sender.clone();
 			debt.term_start = now;
 			// write to the state...
 			<Debts<T>>::insert(debt_id, debt);
 			
 			// TODO emit event
+			Self::deposit_event(RawEvent::DebtFulfilled(sender, debt_id));
 		}
-
-		// pub fn get_total_amount owed -> calculates interest return
-		
 
 		// Debtor pays back "value" 
 		// right now, has to be entire value... 
@@ -191,9 +173,7 @@ decl_module! {
 			// TODO: If debt is fully repaid
 			<erc721::Module<T>>::uncollateralize_token(debt.requestor, debt_id)?;
 
-			// TODO update to non, remove from open queue
-
-			// TODO: emit an event
+			Self::deposit_event(RawEvent::DebtRepaid(sender, debt_id));
 
 		}
 
@@ -211,12 +191,12 @@ decl_module! {
 			ensure!(! debt.principal.is_zero(), "This debt has been paid off");
 			
 			<erc721::Module<T>>::uncollateralize_token(debt.creditor, debt_id)?;
-			
 			// Later: if not the creditor, give account a small "hunting" fee
+
+			Self::deposit_event(RawEvent::DebtSeized(sender, debt_id));
 		}
 
 		// Later: incentivise people to hunt for defaulted
-
 	}
 }
 
@@ -226,7 +206,10 @@ decl_event!(
 		<T as system::Trait>::AccountId,
 		<T as system::Trait>::Hash,
 	{
-		// 								debtor, requestId
-		DebtCreated(AccountId, Hash),
+		// 						trx	sender, debt_id
+		DebtBorrowed(AccountId, Hash),
+		DebtFulfilled(AccountId, Hash), 
+		DebtRepaid(AccountId, Hash),
+		DebtSeized(AccountId, Hash),
 	}
 );

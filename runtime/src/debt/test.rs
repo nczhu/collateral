@@ -160,7 +160,6 @@ fn can_seize() {
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
    	// should accurately increment time and update debts
    		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
-
    		Timestamp::set_timestamp(6);
    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
 
