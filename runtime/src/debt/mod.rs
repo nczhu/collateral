@@ -12,7 +12,7 @@ use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, d
 use system::ensure_signed;
 use super::erc721;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
-use runtime_primitives::traits::{Hash, Zero, As, CheckedAdd, CheckedSub}; // StaticLookup, As //static look up is for beneficiary address
+use runtime_primitives::traits::{Hash, Zero, As, CheckedAdd, CheckedSub, CheckedMul}; // StaticLookup, As //static look up is for beneficiary address
 
 use support::traits::Currency;
 // replaces Balance type.
@@ -35,23 +35,21 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 #[derive(Encode, Decode, Default, Clone, PartialEq)] //these are custom traits required by all structs (some traits forenums)
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
 pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
-	// status: Status,					// Default is Active
-	// todo, wrap this in Option<T::AccountId>
-	requestor: AccountId,		// Account that will go in debt
-	beneficiary: AccountId,	// Recipient of Balance
 	request_expiry: Moment,	// debt_request 
-	//TODO to refactor out into debt_terms (interval, interest rate, deadline)
-	
-	// remaining balances
-	principal: Balance,			// principal remaining; Q: why Balance inside struct, not balanceof
-	interest: Balance,			// interest remaining
-	last_payment: Moment, 		// timestamp of last payment
-	interest_rate: u64,			// % charged on principal, for every interest period
-	interest_period: Moment,		// monthly, daily, in seconds
-	term_length: Moment, 			// repayment time, in seconds
-	// Filled in after loan is fulfilled by someone
+
+	requestor: AccountId,		// TODO: Use Option<T::AccountId>?
+	beneficiary: AccountId,	// Recipient of Balance
 	creditor: AccountId,  	// null as default
-	term_start: Moment,
+	
+	//TODO to refactor out into debt_terms (interval, interest rate, deadline)
+	term_start: Moment,				// when the debt started 
+	term_length: Moment, 			// total time *interval* to repay, in seconds. not a date.
+
+	principal: Balance,				// principal remaining
+	interest: Balance,				// interest remaining
+	interest_rate: u32,				// % charged on principal, 10 for 10 percent
+	interest_period: Moment,		// monthly, daily, in seconds
+	n_periods: Moment, 					// n periods of interest already calculated in interest
 }
 
 type DebtIndex = u64; //like proposalindex in treasury
@@ -67,11 +65,6 @@ decl_storage! {
 		// [0, 0x...] [1, 0x...]
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
 		DebtCount get(get_total_debts): DebtIndex;  //Alias for u64
-
-		// A map of Active debts that system must evaluate
-		// TODO rename to active: ...
-		// ActiveDebts get(get_active_debt): map ActiveIndex => T::Hash;
-		// ActiveDebtsCount get(get_total_active_debts): ActiveIndex; 
 	}
 }
 
@@ -87,7 +80,7 @@ decl_module! {
 				beneficiary: T::AccountId, 
 				request_expiry: T::Moment,
 				principal: BalanceOf<T>, //make compact?
-				interest_rate: u64,
+				interest_rate: u32,
 				interest_period: T::Moment,
 				term_length: T::Moment
 		) { //TODO, change expiry
@@ -141,6 +134,7 @@ decl_module! {
 			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
 			debt.creditor = sender.clone();
 			debt.term_start = now;
+			// debt.last_payment = now; //todo: fix this?
 			// write to the state...
 			<Debts<T>>::insert(debt_id, debt);
 			
@@ -148,9 +142,16 @@ decl_module! {
 			Self::deposit_event(RawEvent::DebtFulfilled(sender, debt_id));
 		}
 
+		// TODO remove this fn
+		pub fn update_balance(debt_id: T::Hash) {
+			Self::_update_balance(debt_id);
+		}
 		// Debtor pays back "value" 
 		// right now, has to be entire value... 
 		pub fn repay(origin, debt_id: T::Hash, value: BalanceOf<T>) {
+
+			// todo: call update balance
+
 			let sender = ensure_signed(origin)?;
 			let now = <timestamp::Module<T>>::get();
 			
@@ -180,6 +181,7 @@ decl_module! {
 		// The tracking of debt defaults, etc is on the debtor
 		// Called by creditor when 
 		pub fn seize(origin, debt_id: T::Hash) {	
+			// TODO call _update_balance
 			let sender = ensure_signed(origin)?;
 			let now = <timestamp::Module<T>>::get();
 
@@ -200,6 +202,51 @@ decl_module! {
 	}
 }
 
+impl <T: Trait> Module<T> {
+																	// balance or currency?
+	fn _update_balance(debt_id: T::Hash) -> Result {
+		let now = <timestamp::Module<T>>::get();
+		
+		// check for activity, not expired, end of term.
+		ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
+		// TODO check debt hasn't expired or defaulted?
+
+		let mut debt = <Debts<T>>::get(debt_id);
+
+		// time passed since last calculated interest
+												// todo: check if n_periods is 0/nil?
+		let time_passed = now - (debt.n_periods * debt.interest_period.clone()); //TODO safer math
+		println!("Seconds passed since last calc {:?}", time_passed);
+
+		// additional periods to calculate interest for
+		let n:u64 = (time_passed / debt.interest_period).as_();			//convert this into u32 somehow
+		println!("Periods passed since last calc {:?}", n);
+
+		// convert to just u64
+		let prev_balance = debt.principal + debt.interest;
+		println!("Prev balance {:?}", prev_balance);
+		
+		// simple interest calculation: balance = (prev_balance)(1 + interest) ^ periods passed
+		let i:f64 = f64::from(debt.interest_rate) / 100.0 + 1.0;
+		let x = i.powi(n as i32) as u64;
+
+						
+		let new_balance = prev_balance + <BalanceOf<T> as As<u64>>::sa(x as u64);
+		// println!("New balance:{:?}", new_balance);
+
+		// let new_balance = prev_balance.checked_add(&y);
+		// let new_balance = prev_balance * y;
+		// let x = (100 + debt.interest_rate).pow(3) ;
+
+		// convert into T::balance
+
+		// debt.n_periods = debt.n_periods + n; // add new periods compounded
+		// debt.interest = new_balance - debt.principal; // update interest with the new compounded interest
+		// <Debts<T>>::insert(debt_id, debt.clone());
+
+		Ok(())
+	}
+}
 
 decl_event!(
 	pub enum Event<T> where 

@@ -92,7 +92,6 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 
 // UNIT Tests
 #[test]
-#[ignore]
 fn should_create_debt_request() {
 	with_externalities(&mut new_test_ext(), || {
 		//       uses the Alias
@@ -105,7 +104,6 @@ fn should_create_debt_request() {
 }
 
 #[test]
-#[ignore]
 fn should_fulfill_request() {
 	with_externalities(&mut new_test_ext(), || {
 		// set up
@@ -162,8 +160,57 @@ fn can_seize() {
    		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
    		Timestamp::set_timestamp(6);
    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
+  	});
+}
+
+#[test]
+fn can_compound_interest() {
+	with_externalities(&mut new_test_ext(), || {
+  		ERC::create_token(Origin::signed(1));
+    	let token_id = ERC::token_by_index(0);
+
+    	// 10% interest per period
+    	// 10: interest period, every 10 seconds interest is compounded
+    	// 500 seconds before collat is seized
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 10, 10, 500); //term length is 
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
+
+			// balance should be 100, interest should be 0
+			Timestamp::set_timestamp(6);
+			assert!(Debt::update_balance(debt_id).is_ok());
+			assert_eq!(Debt::get_debt(debt_id).principal, 100);
+			assert_eq!(Debt::get_debt(debt_id).interest, 0);
+			// balance should be 110, interest should be 10
+			Timestamp::set_timestamp(10);
+   		
+   		// balance should be 121, interest should be 21
+			Timestamp::set_timestamp(20);
+   		
 
   	});
 }
 
+// #[test]
+// fn can_pay_interest() {
+// 	with_externalities(&mut new_test_ext(), || {
+//   		ERC::create_token(Origin::signed(1));
+//     	let token_id = ERC::token_by_index(0);
 
+//     	// 10% interest per period
+//     	// 10: interest period, every 10 seconds interest is compounded
+//     	// 500 seconds before collat is seized
+// 			Debt::borrow(Origin::signed(1), 1, 1, 100, 0.10, 10, 500); //term length is 
+// 			let debt_id = Debt::get_debt_id(0);
+// 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+// 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
+
+
+//    		// should accurately calculate dues
+//    		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
+//    		Timestamp::set_timestamp(6);
+//    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
+
+//   	});
+// }
