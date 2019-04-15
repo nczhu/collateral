@@ -84,8 +84,10 @@ fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 		existential_deposit: 0,
 		vesting: vec![],
 	}.build_storage().unwrap().0);
-	// last step... what this do?
-	t.into()
+	t.extend(timestamp::GenesisConfig::<Test>{
+		minimum_period: 5,
+	}.build_storage().unwrap().0);
+	t.into() // what does this do?
 }
 
 // UNIT Tests
@@ -130,9 +132,9 @@ fn should_fulfill_request() {
 }
 
 #[test]
+// #[ignore]
 fn can_repay() {
     with_externalities(&mut new_test_ext(), || {
-
     	// SETUP... is there a way to refactor this
     	ERC::create_token(Origin::signed(1));
     	let token_id = ERC::token_by_index(0);
@@ -147,7 +149,22 @@ fn can_repay() {
     });
 }
 
+#[test]
+fn can_seize() {
+		with_externalities(&mut new_test_ext(), || {
+  		ERC::create_token(Origin::signed(1));
+    	let token_id = ERC::token_by_index(0);
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 0, 0, 3); //term length is 3
+			let debt_id = Debt::get_debt_id(0);
+			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
+			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
+   	// should accurately increment time and update debts
+   		assert!(Debt::seize(Origin::signed(2), debt_id).is_err()); //should fail
 
+   		Timestamp::set_timestamp(6);
+   		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
 
+  	});
+}
 
 

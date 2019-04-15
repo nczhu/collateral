@@ -12,7 +12,7 @@ use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, d
 use system::ensure_signed;
 use super::erc721;
 use parity_codec::{Encode, Decode}; //enables #[derive(Decode)] Why? what is it
-use runtime_primitives::traits::{Hash, StaticLookup}; // Zero, As //static look up is for beneficiary address
+use runtime_primitives::traits::{Hash, Zero, As, CheckedAdd, CheckedSub}; // StaticLookup, As //static look up is for beneficiary address
 
 use support::traits::Currency;
 // replaces Balance type.
@@ -30,31 +30,31 @@ pub trait Trait: timestamp::Trait + erc721::Trait {
 	type Currency: Currency<Self::AccountId>;
 }
 
-#[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
-#[cfg_attr(feature = "std", derive(Debug))]
-pub enum Status {
-	Active, 			// (in draft, just collateralized, repaying) i.e. not expired, repaid, or seized
-	Repaid, 		// closed, repaid
-	Seized,			// unpaid, collat seized
-}
+// #[derive(Encode, Decode, Clone, Copy, Eq, PartialEq)] //Encode, Deco req for enums, #[cfg_attr(feature = "std", derive(Debug))]
+// #[cfg_attr(feature = "std", derive(Debug))]
+// pub enum Status {
+// 	Active, 			// (in draft, just collateralized, repaying) i.e. not expired, repaid, or seized
+// 	Repaid, 		// closed, repaid
+// 	Seized,			// unpaid, collat seized
+// }
 
 // Status is by default
-impl Default for Status {
-	fn default() -> Self { Status::Active }
-}
+// impl Default for Status {
+// 	fn default() -> Self { Status::Active }
+// }
 
 // Asset owners can create a DebtRequest to ask for a traunche of Balance
 #[derive(Encode, Decode, Default, Clone, PartialEq)] //these are custom traits required by all structs (some traits forenums)
 #[cfg_attr(feature = "std", derive(Debug))] // attr provided by rust compiler. uses derive(debug) trait when in std mode
 pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
-	status: Status,					// Default is Active
+	// status: Status,					// Default is Active
 	// todo, wrap this in Option<T::AccountId>
 	requestor: AccountId,		// Account that will go in debt
 	beneficiary: AccountId,	// Recipient of Balance
 	request_expiry: Moment,	// debt_request 
 	//TODO to refactor out into debt_terms (interval, interest rate, deadline)
 	// principle total, interest total, deadline
-	principal: Balance,			// Principal loan Q: why Balance inside struct, not balanceof
+	principal: Balance,			// Starting principal loan; Q: why Balance inside struct, not balanceof
 	interest_rate: u64,			// % charged on principal, for every interest period
 	interest_period: Moment,		// monthly, daily, in seconds
 	term_length: Moment, 			// repayment time, in seconds
@@ -69,8 +69,9 @@ type ActiveIndex = u64; //like proposalindex in treasury
 /// This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as Debt {
-				// TODO later abstrate T::Hash into generic vars, so its not so long?
-		// doesn't get deleted
+		// TODO later abstrate T::Hash into generic vars, so its not so long?
+		
+		// Queue of active debts. inactive debts are cleared. TODO: track the statuses, credit history
 		Debts get(get_debt): map T::Hash => Debt<T::AccountId, BalanceOf<T>, T::Moment>;
 		// [0, 0x...] [1, 0x...]
 		DebtIndexToId get(get_debt_id): map DebtIndex => T::Hash;
@@ -78,8 +79,8 @@ decl_storage! {
 
 		// A map of Active debts that system must evaluate
 		// TODO rename to active: ...
-		ActiveDebts get(get_active_debt): map ActiveIndex => T::Hash;
-		ActiveDebtsCount get(get_total_active_debts): ActiveIndex; 
+		// ActiveDebts get(get_active_debt): map ActiveIndex => T::Hash;
+		// ActiveDebtsCount get(get_total_active_debts): ActiveIndex; 
 	}
 }
 
@@ -127,6 +128,12 @@ decl_module! {
 			);
 			// Emit the event
 
+			// add to active debts, system reads through this
+			// let j = <ActiveDebtsCount<T>>::get();
+			// <ActiveDebts<T>>::insert(j, debt_id);
+			// <ActiveDebtsCount<T>>::mutate(|n| *n += 1);
+
+
 			Self::deposit_event(RawEvent::DebtCreated(requestor, debt_id));
 		}
 
@@ -140,7 +147,7 @@ decl_module! {
 
 			let now = <timestamp::Module<T>>::get();
 			ensure!(debt.request_expiry >= now, "This debt request has expired");
-			ensure!(debt.status == Status::Active, "This debt request is no longer available");
+			// ensure!(debt.status == Status::Active, "This debt request is no longer available");
 			ensure!(debt.creditor == <T as system::Trait>::AccountId::default(), "This debt request is fulfilled");
 			
 			let collateral = <erc721::Module<T>>::get_escrow(debt_id);
@@ -148,16 +155,15 @@ decl_module! {
 			
 			// With the currency trait from balances<module<T>>
 			T::Currency::transfer(&sender, &debt.beneficiary, debt.principal)?;
-
-			
 			debt.creditor = sender;
-			
 			debt.term_start = now;
 			// write to the state...
 			<Debts<T>>::insert(debt_id, debt);
 			
 			// TODO emit event
 		}
+
+		// pub fn get_total_amount owed -> calculates interest return
 		
 
 		// Debtor pays back "value" 
@@ -168,55 +174,49 @@ decl_module! {
 			
 			ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
 			let mut debt = <Debts<T>>::get(debt_id);
-			ensure!(debt.status == Status::Active, "This debt is no longer active");
-			
-			// TODO figure out safer way to add Moments 
-			let term_end = debt.term_start.clone() + debt.term_length.clone();
-			ensure!(now <= term_end, "This debt is past due");
 
-			// TODO: later enable multiple repayments
+			ensure!(debt.creditor != <T as system::Trait>::AccountId::default(), "This debt was never fulfilled");
+			
+			let term_end = debt.term_start.clone() + debt.term_length.clone(); // TODO figure out safer way to add Moments 
+			ensure!(now <= term_end, "This debt is past due");
 			ensure!(value >= debt.principal, "You have to repay the debt in full");
 
-			
+			// TODO grab the min btw value, and whats owed
 			T::Currency::transfer(&sender, &debt.creditor, value)?;
+			debt.principal = debt.principal.checked_sub(&value)
+				.ok_or("Underflow substracting debt")?;
 
-			// return collateral
-			<erc721::Module<T>>::uncollateralize_token(debt.requestor.clone(), debt_id)?;
-			// mark as completed
+			<Debts<T>>::insert(debt_id, debt.clone());
 
-			// TODO check if repaid
-			debt.status = Status::Repaid;
+			// TODO: If debt is fully repaid
+			<erc721::Module<T>>::uncollateralize_token(debt.requestor, debt_id)?;
 
-			<Debts<T>>::insert(debt_id, debt);
 			// TODO update to non, remove from open queue
 
 			// TODO: emit an event
 
 		}
 
-		// Checks for time based, passive situations
-		
-		// collateralized & request expired -> returns collateral
-		// loan-defaulted, never paid -> seize collateral
-		fn on_initialize() {
-			// Check if Active/collateralized && expired => EXPIRED, remove
+		// The tracking of debt defaults, etc is on the debtor
+		// Called by creditor when 
+		pub fn seize(origin, debt_id: T::Hash) {	
+			let sender = ensure_signed(origin)?;
+			let now = <timestamp::Module<T>>::get();
+
+			ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
+			let mut debt = <Debts<T>>::get(debt_id);
+			ensure!(debt.creditor != <T as system::Trait>::AccountId::default(), "This debt was never fulfilled");
+			let term_end = debt.term_start.clone() + debt.term_length.clone(); // TODO figure out safer way to add Moments 
+			ensure!(now >= term_end, "This debt has not defaulted yet");
+			ensure!(! debt.principal.is_zero(), "This debt has been paid off");
 			
-			// Check if Active & collateralized => Active, add available for debter
-				// => 
-
-			// if active & repay date passed  => seized
-			// if active & repaid 						=> repaid
-			// if active & ddaste has passd => inactive
-
-			// TODO: Accrue interest...
+			<erc721::Module<T>>::uncollateralize_token(debt.creditor, debt_id)?;
+			
+			// Later: if not the creditor, give account a small "hunting" fee
 		}
 
-		fn on_finalize() {
-			// TODO: clean up unfulfilled debt requests that don't need to be onchain
-			// default/repaid should forever remain on chain... 
+		// Later: incentivise people to hunt for defaulted
 
-		}
-		
 	}
 }
 
