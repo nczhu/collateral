@@ -20,30 +20,17 @@ use system::ensure_signed;
 use parity_codec::Encode; // serialization and deserialization codec for simple marshalling.
 use runtime_primitives::traits::{Hash, Zero};
 use rstd::prelude::*;
-// use support::traits::Currency;
 
 
 #[cfg(test)] //tells compiler to compile based on "test" flag. i.e. its a test.
 mod test;
-
-// TODO check if I need this:
-// type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
-// type PositiveImbalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::PositiveImbalance;
-// type NegativeImbalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::NegativeImbalance;
 
 /// The module's configuration trait.
 pub trait Trait: balances::Trait {
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
-    // type Currency: Currency<Self::AccountId>;
 }
-
-// impl<T: Trait> Token for Module<T> {
-//     fn get_collateral(id: T::Hash) -> T::Hash {
-//         <Escrow>::get(id);
-//     }
-// }
 
 decl_event!(
     pub enum Event<T>
