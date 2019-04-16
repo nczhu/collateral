@@ -145,17 +145,18 @@ decl_module! {
 			let term_end = debt.term_start.clone() + debt.term_length.clone(); // TODO figure out safer way to add Moments 
 			ensure!(now <= term_end, "This debt is past due");
 		
-			// TODO grab the min btw value, and whats owed
-			T::Currency::transfer(&sender, &debt.creditor, value)?;
+			let balance = debt.principal + debt.interest; 
+			let payment = cmp::min(value, balance); 			// make sure debtor doesn't overpay
+			T::Currency::transfer(&sender, &debt.creditor, payment)?;
 			
-			let interest_payment = cmp::min(debt.interest, value);
-			// TODO check if this is redundant, since checked_sub substracts in place
+			// 1. pay interest first
+			let interest_payment = cmp::min(debt.interest, payment);
 			debt.interest = debt.interest.checked_sub(&interest_payment)
 				.ok_or("Underflow substracting interest payment")?;
 
-			// 2. if remainder, pay off principal
-			if value > interest_payment {
-				let principal_payment = value.checked_sub(&interest_payment)
+			// 2. if money left, pay the principal
+			if payment > interest_payment {
+				let principal_payment = payment.checked_sub(&interest_payment)
 					.ok_or("Underflow substracting principal payment")?;
 				debt.principal = debt.principal.checked_sub(&principal_payment)
 					.ok_or("Underflow substracting from principal")?;				
@@ -163,7 +164,6 @@ decl_module! {
 
 			<Debts<T>>::insert(debt_id, debt.clone());
 
-			// TODO: If debt is fully repaid
 			if debt.principal.is_zero() && debt.interest.is_zero() {
 				<erc721::Module<T>>::uncollateralize_token(debt.requestor, debt_id)?;	
 			}
@@ -174,14 +174,15 @@ decl_module! {
 		// The tracking of debt defaults, etc is on the debtor
 		// Called by creditor when 
 		pub fn seize(origin, debt_id: T::Hash) {	
-			Self::update_balance(debt_id); // updates interest calculations
+			Self::update_balance(debt_id);
 
 			let sender = ensure_signed(origin)?;
 			let now = <timestamp::Module<T>>::get();
 
 			ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
 			let mut debt = <Debts<T>>::get(debt_id);
-			ensure!(debt.creditor != <T as system::Trait>::AccountId::default(), "This debt was never fulfilled");
+
+			ensure!(debt.creditor != <T as system::Trait>::AccountId::default(), "This debt request was never fulfilled");
 			let term_end = debt.term_start.clone() + debt.term_length.clone(); // TODO figure out safer way to add Moments 
 			ensure!(now >= term_end, "This debt has not defaulted yet");
 
@@ -196,12 +197,9 @@ decl_module! {
 }
 
 impl <T: Trait> Module<T> {
-																	// balance or currency?
-	// TODO check if this works for seize
 	pub fn update_balance(debt_id: T::Hash) -> Result {
 		let now = <timestamp::Module<T>>::get();
-		
-		// check for activity, not expired, end of term.
+
 		ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
 		let mut debt = <Debts<T>>::get(debt_id);
 
@@ -209,11 +207,8 @@ impl <T: Trait> Module<T> {
 
 		// additional periods to calculate interest for
 		let t:u64 = (time_passed / debt.interest_period.clone()).as_();
-
-		// convert to just u64
 		let principal:u64 = debt.principal.as_();
 		let prev_interest:u64 = debt.interest.as_();
-		let prev_balance:u64 = principal + prev_interest;
 		
 		// simple interest calculation: A=P(1+rt)
 		let new_balance = principal * (10000 + debt.interest_rate * t) / 10000; 
@@ -233,7 +228,6 @@ decl_event!(
 		<T as system::Trait>::AccountId,
 		<T as system::Trait>::Hash,
 	{
-		// 						trx	sender, debt_id
 		DebtBorrowed(AccountId, Hash),
 		DebtFulfilled(AccountId, Hash), 
 		DebtRepaid(AccountId, Hash),

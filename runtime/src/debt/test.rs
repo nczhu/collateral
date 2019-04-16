@@ -140,13 +140,13 @@ fn can_repay() {
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
 			// repay should clear debt, return collateral
-			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 100));
-			assert_eq!(100, Balance::free_balance(&2));
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 50));
+			assert_eq!(50, Balance::free_balance(&2));
     });
 }
 
 #[test]
-fn repay_interest_first() {
+fn can_repay_interest_first() {
 		with_externalities(&mut new_test_ext(), || {
     	ERC::create_token(Origin::signed(1));
     	let token_id = ERC::token_by_index(0);
@@ -154,7 +154,7 @@ fn repay_interest_first() {
 			let debt_id = Debt::get_debt_id(0);
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
-			// repay should clear debt, return collateral
+			
 			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 0));
 			assert_eq!(Debt::get_debt(debt_id).principal, 100);
 
@@ -162,10 +162,15 @@ fn repay_interest_first() {
 			assert_eq!(Debt::get_debt(debt_id).principal, 90);
 			assert_eq!(Debt::get_debt(debt_id).interest, 0);
 
-			Timestamp::set_timestamp(2); //21 in interest
-			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 10));
+			Timestamp::set_timestamp(2);
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 10));		//paying partial
 			assert_eq!(Debt::get_debt(debt_id).principal, 90);
 			assert_eq!(Debt::get_debt(debt_id).interest, 8);
+
+			// uses remainder to pay principal
+			assert_ok!(Debt::repay(Origin::signed(1), debt_id, 19));		//paying partial
+			assert_eq!(Debt::get_debt(debt_id).principal, 79);
+			assert_eq!(Debt::get_debt(debt_id).interest, 0);
     });
 }
 
@@ -183,11 +188,6 @@ fn can_seize() {
    		Timestamp::set_timestamp(6);
    		assert!(Debt::seize(Origin::signed(2), debt_id).is_ok()); //should work
   	});
-}
-
-#[test]
-fn cannot_seize_paid_off() {
-	// TODO
 }
 
 #[test]
