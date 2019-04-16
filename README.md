@@ -4,7 +4,7 @@ A simple implementation of tokenized debt, with simple-interest. A token owner c
 
 ### Modules: 
 * `Debt`: handles creation of loan requests, paybacks, seizing of collateral.
-* `ERC721`: adapted from this (sample)[https://github.com/parity-samples/substrate-erc721/tree/master/substrate-erc721] to also be able to collateralize and uncollateralize tokens for a `reason`.
+* `ERC721`: adapted from this [sample](https://github.com/parity-samples/substrate-erc721/tree/master/substrate-erc721) to also be able to collateralize and uncollateralize tokens for a `reason`.
 
 ### Run Tests
 `cargo test -p node-template-runtime -- --nocapture`
