@@ -46,7 +46,7 @@ pub struct Debt<AccountId, Balance, Moment> {   //Needs the blake2 Hash trait
 
 	principal: Balance,				// principal remaining
 	interest: Balance,				// interest remaining
-	interest_rate: u32,				// % charged on principal, 10 for 10 percent
+	interest_rate: u64,				// interest: 100 is 1% , significance to 0.00%
 	interest_period: Moment,		// monthly, daily, in seconds
 	n_periods: u64, 					// n periods of interest already calculated in interest
 }
@@ -73,7 +73,7 @@ decl_module! {
 				beneficiary: T::AccountId, 
 				request_expiry: T::Moment,
 				principal: BalanceOf<T>, //make compact?
-				interest_rate: u32,
+				interest_rate: u64,
 				interest_period: T::Moment,
 				term_length: T::Moment
 		) { //TODO, change expiry
@@ -148,7 +148,6 @@ decl_module! {
 			// TODO grab the min btw value, and whats owed
 			T::Currency::transfer(&sender, &debt.creditor, value)?;
 			
-			// 1. pay off interest
 			let interest_payment = cmp::min(debt.interest, value);
 			// TODO check if this is redundant, since checked_sub substracts in place
 			debt.interest = debt.interest.checked_sub(&interest_payment)
@@ -175,7 +174,8 @@ decl_module! {
 		// The tracking of debt defaults, etc is on the debtor
 		// Called by creditor when 
 		pub fn seize(origin, debt_id: T::Hash) {	
-			// TODO call _update_balance
+			Self::update_balance(debt_id); // updates interest calculations
+
 			let sender = ensure_signed(origin)?;
 			let now = <timestamp::Module<T>>::get();
 
@@ -184,8 +184,10 @@ decl_module! {
 			ensure!(debt.creditor != <T as system::Trait>::AccountId::default(), "This debt was never fulfilled");
 			let term_end = debt.term_start.clone() + debt.term_length.clone(); // TODO figure out safer way to add Moments 
 			ensure!(now >= term_end, "This debt has not defaulted yet");
-			ensure!(! debt.principal.is_zero(), "This debt has been paid off");
-			
+
+			let owed = debt.principal + debt.interest;
+			ensure!(! owed.is_zero(), "This debt has been paid off");
+
 			<erc721::Module<T>>::uncollateralize_token(debt.creditor, debt_id)?;
 
 			Self::deposit_event(RawEvent::DebtSeized(sender, debt_id));
@@ -195,34 +197,30 @@ decl_module! {
 
 impl <T: Trait> Module<T> {
 																	// balance or currency?
+	// TODO check if this works for seize
 	pub fn update_balance(debt_id: T::Hash) -> Result {
 		let now = <timestamp::Module<T>>::get();
 		
 		// check for activity, not expired, end of term.
 		ensure!(<Debts<T>>::exists(debt_id), "This debt does not exist");
-
 		let mut debt = <Debts<T>>::get(debt_id);
 
-		// time passed since last calculated interest
-												// todo: check if n_periods is 0/nil?
 		let time_passed = now - (T::Moment::sa(debt.n_periods) * debt.interest_period.clone()); //TODO safer math
 
 		// additional periods to calculate interest for
-		let n:u64 = (time_passed / debt.interest_period.clone()).as_();
+		let t:u64 = (time_passed / debt.interest_period.clone()).as_();
 
 		// convert to just u64
 		let principal:u64 = debt.principal.as_();
 		let prev_interest:u64 = debt.interest.as_();
 		let prev_balance:u64 = principal + prev_interest;
 		
-		// simple interest calculation: balance = (prev_balance)(1 + interest) ^ periods passed
-		let i:f64 = f64::from(debt.interest_rate) / 100.0 + 1.0;
-		let x = i.powi(n as i32);
-		let new_balance = ((prev_balance as f64) * x ) as u64;
-		let new_interest = new_balance - principal;
+		// simple interest calculation: A=P(1+rt)
+		let new_balance = principal * (10000 + debt.interest_rate * t) / 10000; 
+		let new_interest = prev_interest + new_balance - principal;
 
 		debt.interest = <BalanceOf<T> as As<u64>>::sa(new_interest as u64); //todo get rid of extraneous things
-		debt.n_periods = debt.n_periods + n;
+		debt.n_periods = debt.n_periods + t;
 
 		<Debts<T>>::insert(debt_id, debt.clone());
 

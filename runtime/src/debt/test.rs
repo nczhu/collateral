@@ -110,8 +110,8 @@ fn should_fulfill_request() {
 		ERC::create_token(Origin::signed(0));
     let token_id = ERC::token_by_index(0);
 
-		//       uses the Alias
-		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 5, 1, 3));
+		//       uses the aliasing														5%
+		assert_ok!(Debt::borrow(Origin::signed(0), 0, 1, 100, 500, 1, 3));
 		let debt_id = Debt::get_debt_id(0);
 
 		// Debt isn't collateralized yet
@@ -150,7 +150,7 @@ fn repay_interest_first() {
 		with_externalities(&mut new_test_ext(), || {
     	ERC::create_token(Origin::signed(1));
     	let token_id = ERC::token_by_index(0);
-			Debt::borrow(Origin::signed(1), 1, 1, 100, 10, 1, 3); //100 loan, 10%, 1 period
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 1000, 1, 3); //100 loan, 10%, 1 period
 			let debt_id = Debt::get_debt_id(0);
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();
@@ -174,7 +174,7 @@ fn can_seize() {
 		with_externalities(&mut new_test_ext(), || {
   		ERC::create_token(Origin::signed(1));
     	let token_id = ERC::token_by_index(0);
-			Debt::borrow(Origin::signed(1), 1, 1, 100, 5, 1, 3); //term length is 3, int period is 1
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 500, 1, 3); //term length is 3, int period is 1
 			let debt_id = Debt::get_debt_id(0);
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
@@ -186,7 +186,12 @@ fn can_seize() {
 }
 
 #[test]
-fn can_compound_interest() {
+fn cannot_seize_paid_off() {
+	// TODO
+}
+
+#[test]
+fn can_simple_interest() {
 	with_externalities(&mut new_test_ext(), || {
   		ERC::create_token(Origin::signed(1));
     	let token_id = ERC::token_by_index(0);
@@ -194,7 +199,7 @@ fn can_compound_interest() {
     	// 10% interest per period
     	// 10: interest period, every 10 seconds interest is compounded
     	// 500 seconds before collat is seized
-			Debt::borrow(Origin::signed(1), 1, 1, 100, 10, 10, 500); //term length is 
+			Debt::borrow(Origin::signed(1), 1, 1, 100, 1000, 10, 500);
 			let debt_id = Debt::get_debt_id(0);
 			ERC::collateralize_token(Origin::signed(1), token_id, debt_id);
 			Debt::fulfill(Origin::signed(2), debt_id).is_ok();	// term start is 0
@@ -213,11 +218,11 @@ fn can_compound_interest() {
    		// balance should be 121, interest should be 21
 			Timestamp::set_timestamp(21);
 			assert!(Debt::update_balance(debt_id).is_ok());
-			assert_eq!(Debt::get_debt(debt_id).interest, 21);
+			assert_eq!(Debt::get_debt(debt_id).interest, 20);
 			
 
 			Timestamp::set_timestamp(59);
 			assert!(Debt::update_balance(debt_id).is_ok());
-			assert_eq!(Debt::get_debt(debt_id).interest, 61);
+			assert_eq!(Debt::get_debt(debt_id).interest, 50);
   	});
 }
